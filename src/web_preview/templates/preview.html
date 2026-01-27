@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview - VTU Automation</title>
+    <link href="{{ url_for('static', path='/css/style.css') }}" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>Review Entry</h1>
+            <a href="/generate_ui" class="btn btn-secondary">← Back</a>
+        </header>
+
+        {% if entry.uncertainties %}
+        <div
+            style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; padding: 1.5rem; border-radius: 1rem; margin-bottom: 2rem;">
+            <h4 style="color: #ef4444; margin-top: 0;">⚠ Uncertainties Detected</h4>
+            <ul style="color: #fca5a5; margin-bottom: 1rem;">
+                {% for unc in entry.uncertainties %}
+                <li>{{ unc }}</li>
+                {% endfor %}
+            </ul>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="checkbox" id="ack" onchange="toggleSubmit()" style="accent-color: #ef4444;">
+                <label for="ack">I acknowledge these uncertainties and confirm text is correct.</label>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div style="margin-bottom: 1.5rem;">
+                <label for="entry_date"
+                    style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Date
+                    (YYYY-MM-DD)</label>
+                <input type="date" id="entry_date" value="{{ entry.date }}" style="
+                    background: rgba(0,0,0,0.2);
+                    border: 1px solid var(--border-color);
+                    border-radius: 0.5rem;
+                    color: var(--text-primary);
+                    padding: 0.5rem 1rem;
+                    font-family: inherit;
+                    font-size: 1rem;
+                ">
+            </div>
+
+            <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Generated Entry Text
+                (Editable)</label>
+            <textarea id="entry_text" style="
+                width: 100%;
+                min-height: 300px;
+                background: rgba(0,0,0,0.2);
+                border: 1px solid var(--border-color);
+                border-radius: 0.75rem;
+                color: var(--text-primary);
+                padding: 1rem;
+                font-family: 'Outfit', sans-serif;
+                font-size: 1.1rem;
+                line-height: 1.6;
+                margin-bottom: 0.5rem;
+                resize: vertical;
+            ">{{ entry.entry_text }}</textarea>
+
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2rem;">
+                <div id="wordcount" style="font-size: 0.9rem; color: var(--text-secondary);">Words: 0</div>
+                {% if usage_stats %}
+                <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                    Cost: ${{ usage_stats.estimated_cost_usd }} ({{ usage_stats.total_input_tokens +
+                    usage_stats.total_output_tokens }} tokens)
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <button class="btn btn-secondary" onclick="saveLocally()" style="justify-content: center;">Save Local
+                    Copy</button>
+                <button id="submit-btn" class="btn" onclick="confirmAndSubmit()" style="justify-content: center;" {% if
+                    entry.uncertainties %}disabled{% endif %}>
+                    Confirm & Submit to Portal
+                </button>
+            </div>
+
+            <div id="status-msg" style="margin-top: 1rem; text-align: center; color: var(--accent-primary);"></div>
+        </div>
+    </div>
+
+    <script>
+        const textarea = document.getElementById('entry_text');
+        const dateInput = document.getElementById('entry_date');
+        const wordcount = document.getElementById('wordcount');
+        const ack = document.getElementById('ack');
+        const submitBtn = document.getElementById('submit-btn');
+
+        function updateWordCount() {
+            const count = textarea.value.trim().split(/\s+/).length;
+            wordcount.innerText = `Words: ${count}`;
+            if (count < 120 || count > 180) {
+                wordcount.style.color = '#ef4444';
+            } else {
+                wordcount.style.color = '#10b981';
+            }
+        }
+
+        function toggleSubmit() {
+            if (ack) {
+                submitBtn.disabled = !ack.checked;
+                if (!ack.checked) {
+                    submitBtn.style.opacity = '0.5';
+                    submitBtn.style.cursor = 'not-allowed';
+                } else {
+                    submitBtn.style.opacity = '1';
+                    submitBtn.style.cursor = 'pointer';
+                }
+            }
+        }
+
+        textarea.addEventListener('input', updateWordCount);
+        updateWordCount();
+        if (ack) toggleSubmit();
+
+        async function saveLocally() {
+            const text = textarea.value;
+            const res = await fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            const data = await res.json();
+            document.getElementById('status-msg').innerText = data.message;
+        }
+
+        async function confirmAndSubmit() {
+            document.getElementById('status-msg').innerText = "Starting Selenium submit flow... Check your terminal/browser window.";
+            const text = textarea.value;
+            const date = dateInput.value;
+
+            const res = await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, date })
+            });
+            const data = await res.json();
+            document.getElementById('status-msg').innerText = data.message;
+            if (data.message && data.message.includes("SUBMITTED")) {
+                document.getElementById('status-msg').style.color = "#10b981";
+            } else {
+                document.getElementById('status-msg').style.color = "#ef4444";
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Diary - VTU Automation</title>
+    <link href="{{ url_for('static', path='/css/style.css') }}" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>Generate Entry</h1>
+            <a href="/" class="btn btn-secondary">← Back</a>
+        </header>
+
+        <div class="card" style="max-width: 800px; margin: 0 auto;">
+            <label for="raw_text" style="display: block; margin-bottom: 1rem; color: var(--text-secondary);">Paste your
+                daily notes below:</label>
+            <textarea id="raw_text" style="
+                width: 100%;
+                min-height: 250px;
+                background: rgba(0,0,0,0.2);
+                border: 1px solid var(--border-color);
+                border-radius: 0.75rem;
+                color: var(--text-primary);
+                padding: 1rem;
+                font-family: 'Courier New', monospace;
+                resize: vertical;
+                margin-bottom: 1.5rem;
+            " placeholder="Example:
+9:30-11:00 wrote tests - found failing API, fixed & pushed commit abc123
+14:00 met Prof. Sharma about experiment design sample rate
+prepared slides for Friday
+refactor parser (incomplete)"></textarea>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+                <div
+                    style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 0.5rem;">
+                    <input type="checkbox" id="with_git"
+                        style="width: 1.2rem; height: 1.2rem; accent-color: var(--accent-primary);">
+                    <label for="with_git" style="cursor: pointer;">Include Git commits</label>
+                </div>
+                <div
+                    style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 0.5rem;">
+                    <input type="checkbox" id="with_calendar"
+                        style="width: 1.2rem; height: 1.2rem; accent-color: var(--accent-primary);">
+                    <label for="with_calendar" style="cursor: pointer;">Include Calendar events</label>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generateDiary()" style="width: 100%; font-size: 1.1rem;">
+                Generate Entry
+            </button>
+
+            <div id="status"
+                style="margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; display: none; text-align: center;">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function generateDiary() {
+            const raw_text = document.getElementById('raw_text').value;
+            const with_git = document.getElementById('with_git').checked;
+            const with_calendar = document.getElementById('with_calendar').checked;
+            const statusDiv = document.getElementById('status');
+            const btn = document.querySelector('.btn');
+
+            if (!raw_text.trim()) {
+                statusDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+                statusDiv.style.color = '#ef4444';
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = 'Please enter your daily notes.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = 'Generating...';
+            statusDiv.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ raw_text, with_git, with_calendar })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    statusDiv.style.background = 'rgba(16, 185, 129, 0.1)';
+                    statusDiv.style.color = '#10b981';
+                    statusDiv.innerHTML = '✓ Generated successfully! Redirecting...';
+                    statusDiv.style.display = 'block';
+
+                    setTimeout(() => {
+                        window.location.href = '/preview';
+                    }, 1500);
+                } else {
+                    throw new Error(data.error || 'Generation failed');
+                }
+            } catch (error) {
+                statusDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+                statusDiv.style.color = '#ef4444';
+                statusDiv.innerHTML = `✗ Error: ${error.message}`;
+                statusDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Generate Entry';
+            }
+        }
+    </script>
+</body>
+
+</html>

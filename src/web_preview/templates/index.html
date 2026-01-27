@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTU Internship Automation</title>
+    <link href="{{ url_for('static', path='/css/style.css') }}" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header style="margin-top: 4rem; margin-bottom: 4rem; text-align: center;">
+            <h1>VTU Internship Automation</h1>
+            <p class="subtitle">Trustless Diary Generation · Secure Portal Submission</p>
+        </header>
+
+        <div class="card-grid">
+            <div class="card" onclick="window.location.href='/generate_ui'">
+                <div class="card-icon">✍️</div>
+                <h3>Generate Diary</h3>
+                <p>Transform raw notes into professional, structured diary entries using advanced AI constraints.</p>
+                <a href="/generate_ui" class="btn">Start Generating</a>
+            </div>
+
+            <div class="card" onclick="window.location.href='/preview'">
+                <div class="card-icon">👁️</div>
+                <h3>Preview & Edit</h3>
+                <p>Review AI outputs, verified against constraints. Edit and refine before submission.</p>
+                <a href="/preview" class="btn">View Preview</a>
+            </div>
+
+            <div class="card" onclick="window.location.href='/submit_ui'">
+                <div class="card-icon">🔐</div>
+                <h3>Secure Submit</h3>
+                <p>Automated Selenium webdriver with manual human-in-the-loop verification step.</p>
+                <a href="/submit_ui" class="btn btn-secondary">Portal Submit</a>
+            </div>
+
+            <div class="card" onclick="window.location.href='/audit'">
+                <div class="card-icon">📊</div>
+                <h3>Audit Log</h3>
+                <p>Immutable, encrypted audit trail of all generations and submissions for compliance.</p>
+                <a href="/audit" class="btn btn-secondary">View Audit</a>
+            </div>
+        </div>
+
+        <div class="feature-list">
+            <h2>System Capabilities</h2>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <div class="feature-text">
+                        <h4>Zero-Hallucination Policy</h4>
+                        <p>Strict prompt engineering ensures the AI never invents facts.</p>
+                    </div>
+                </div>
+
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <div class="feature-text">
+                        <h4>Git & Calendar Integration</h4>
+                        <p>Automatically fetch commits and meetings as proof of work.</p>
+                    </div>
+                </div>
+
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <div class="feature-text">
+                        <h4>Session Persistence</h4>
+                        <p>Securely reuses session cookies to minimize login friction.</p>
+                    </div>
+                </div>
+
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <div class="feature-text">
+                        <h4>Resilient Automation</h4>
+                        <p>Auto-retry logic handles network instability and portal errors.</p>
+                    </div>
+                </div>
+
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <div class="feature-text">
+                        <h4>Local Execution</h4>
+                        <p>Runs entirely on your machine. Your data never leaves localhost.</p>
+                    </div>
+                </div>
+
+                <div class="feature">
+                    <div class="feature-icon">✓</div>
+                    <div class="feature-text">
+                        <h4>Audit Trail</h4>
+                        <p>Every action is logged and encrypted for academic integrity.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Advanced Agentic Automation · VTU Internship System v2.0</p>
+        </footer>
+    </div>
+</body>
+
+</html>

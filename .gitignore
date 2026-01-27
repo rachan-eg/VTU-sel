@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+docs/
+uv.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Sensitive
+.env
+*.key
+*.pem
+_audit_log.enc
+_secret.key
+failed_llm_response.txt
+
+# Application Data (Ignore but keep directories)
+screenshots/*
+!screenshots/.gitkeep
+sessions/*
+!sessions/.gitkeep
+logs/*
+!logs/.gitkeep
+temp/
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Temporary files
+*.tmp
+*.bak
+*.swp

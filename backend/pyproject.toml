@@ -52,7 +52,7 @@ dev = [
 ]
 
 [project.scripts]
-vtu-auto = "src.cli:main"
+vtu-auto = "src.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]

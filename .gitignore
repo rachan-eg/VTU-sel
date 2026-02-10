@@ -62,22 +62,17 @@ vtu_automation.db
 # Application Data & Runtime
 # ============================================================================
 # Screenshots
-screenshots/*
-!screenshots/.gitkeep
-
-# Session cookies
-sessions/*
-!sessions/.gitkeep
-auth_state.json
+backend/screenshots/*
+!backend/screenshots/.gitkeep
 
 # Logs
-logs/*
-!logs/.gitkeep
+backend/logs/*
+!backend/logs/.gitkeep
 *.log
 
 # Data directory caches
-data/*
-!data/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
 data/vtu_skills.json
 data/skill_embeddings.npy
 data/skills_faiss.index
@@ -114,6 +109,7 @@ playwright/.cache/
 # ============================================================================
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -148,6 +144,8 @@ failed_llm_response.txt
 input/raw_input.txt
 input/*
 !input/.gitkeep
+backend/input/*
+!backend/input/.gitkeep
 
 # Task CSV files (user data)
 task_update-*.csv
@@ -174,3 +172,6 @@ nul
 # Incomplete modules (placeholders)
 src/plausibility/engine.py
 
+# Old/backup files
+*.old.py
+backend/app.old.py

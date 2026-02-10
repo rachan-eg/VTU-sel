@@ -5,7 +5,8 @@
       "Bash(curl:*)",
       "Bash(docker exec:*)",
       "Bash(docker cp:*)",
-      "Bash(.venvScriptspython -m playwright install chromium)"
+      "Bash(.venvScriptspython -m playwright install chromium)",
+      "Bash(ls:*)"
     ]
   }
 }

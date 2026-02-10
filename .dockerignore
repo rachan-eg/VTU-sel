@@ -1,6 +1,7 @@
 # Git
-.git/
+.git
 .gitignore
+.gitattributes
 
 # Python
 __pycache__/
@@ -15,42 +16,38 @@ build/
 venv/
 env/
 
-# IDEs
+# Node
+node_modules/
+npm-debug.log*
+frontend/.vite/
+frontend/dist/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Logs and temp files
-logs/*
-temp/
-*.log
-*.tmp
+# Runtime data
+backend/data/*
+backend/logs/*
+backend/screenshots/*
+backend/input/*
+*.db
+*.sqlite
 
 # Documentation
-README.md
-README.DOCKER.md
-QUICKSTART.md
 docs/
+*.md
+!README.md
 
-# Examples (we need system_prompts and examples folder)
-screenshots/
-
-# Sessions (will be mounted as volume)
-sessions/*
-
-# Input (will be mounted as volume)
-input/*
-
-# Environment files
+# Environment (will be mounted)
 .env
-.env.docker.local
-.env.example
+.env.local
+
+# Static (will be mounted from build)
+static/
 
 # Other
-uv.lock
+.DS_Store
+*.log

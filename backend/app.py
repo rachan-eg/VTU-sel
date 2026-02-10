@@ -8,6 +8,7 @@ FastAPI backend serving:
 import sys
 import asyncio
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,13 +25,28 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-STATIC_DIR = Path(__file__).parent / "static"
+# Static dir is in parent (root) directory
+STATIC_DIR = Path(__file__).parent.parent / "static"
 
-# Create FastAPI app
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
+    logger.info("Starting VTU Diary Automation v3.0 — GOD MODE")
+    init_db()
+    logger.info("Database initialized")
+    yield
+    # Shutdown
+    logger.info("Shutting down VTU Diary Automation")
+
+
+# Create FastAPI app with lifespan handler
 app = FastAPI(
     title="VTU Diary Automation",
     description="GOD MODE — AI diary generation + parallel browser swarm submission",
     version="3.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware (allows React dev server at :3000 to talk to API at :5000)
@@ -44,14 +60,6 @@ app.add_middleware(
 
 # Include API routes (/api/*)
 app.include_router(router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    logger.info("Starting VTU Diary Automation v3.0 — GOD MODE")
-    init_db()
-    logger.info("Database initialized")
 
 
 @app.websocket("/ws/progress/{session_id}")
@@ -107,7 +115,7 @@ if __name__ == '__main__':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
     uvicorn.run(
-        "app_new:app",
+        "app:app",
         host=API_HOST,
         port=API_PORT,
         reload=True,

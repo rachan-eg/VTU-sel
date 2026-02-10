@@ -31,11 +31,17 @@ htmlcov/
 
 # Sensitive
 .env
+.env.docker.local
 *.key
 *.pem
 _audit_log.enc
 _secret.key
 failed_llm_response.txt
+
+# Input files (contain user data)
+input/raw_input.txt
+input/*
+!input/.gitkeep
 
 # Application Data (Ignore but keep directories)
 screenshots/*

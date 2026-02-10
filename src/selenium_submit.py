@@ -1,9 +1,9 @@
 from pathlib import Path
-from core.driver import setup_driver
-from core.exceptions import SubmitError
-from core.session import save_session, load_session
-from core.auth import login, manual_login_prompt
-from core.form import fill_diary
+from src.core.driver import setup_driver
+from src.core.exceptions import SubmitError
+from src.core.session import save_session, load_session
+from src.core.auth import login, manual_login_prompt
+from src.core.form import fill_diary
 
 class VTUSubmitter:
     """Facade for VTU automation."""

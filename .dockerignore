@@ -1,0 +1,56 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs and temp files
+logs/*
+temp/
+*.log
+*.tmp
+
+# Documentation
+README.md
+README.DOCKER.md
+QUICKSTART.md
+docs/
+
+# Examples (we need system_prompts and examples folder)
+screenshots/
+
+# Sessions (will be mounted as volume)
+sessions/*
+
+# Input (will be mounted as volume)
+input/*
+
+# Environment files
+.env
+.env.docker.local
+.env.example
+
+# Other
+uv.lock

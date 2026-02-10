@@ -1,8 +1,8 @@
 import os
 import time
-from core.llm.gemini import GeminiClient
-from core.llm.openai import OpenAIClient
-from core.llm.mock import MockClient
+from src.core.llm.gemini import GeminiClient
+from src.core.llm.openai import OpenAIClient
+from src.core.llm.mock import MockClient
 
 class LLMError(Exception): pass
 
@@ -36,3 +36,12 @@ class LLMClient:
 
     def get_usage_stats(self):
         return self.provider.get_stats()
+
+    def generate(self, system, prompt):
+        """Generate response from LLM with system prompt"""
+        return self.generate_diary(prompt, system)
+
+def get_llm_client():
+    """Get configured LLM client based on environment"""
+    provider = os.getenv("LLM_PROVIDER", "mock")
+    return LLMClient(provider=provider)

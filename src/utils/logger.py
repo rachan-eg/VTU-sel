@@ -38,3 +38,6 @@ def setup_logger(name: str, level: str = None) -> logging.Logger:
         logger.addHandler(file_handler)
     
     return logger
+
+# Alias for compatibility
+get_logger = setup_logger

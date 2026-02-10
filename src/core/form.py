@@ -93,62 +93,111 @@ def _fill_once(driver, wait, data, dry_run):
         (By.XPATH, "//label[contains(text(), 'Links')]/following-sibling::input")
     ], data["links"], "Links")
     
-    # Skill IDs (React Select) - Aggressive Interaction
-    print("[VTU] Attempting to fill Skills...")
-    skills_filled = False
-    
-    # Method 1: React Select Input Interaction
+    # Skills (React Select Multi-Select) - Select Multiple Skills
+    print(f"[VTU] Attempting to fill Skills: {data.get('skills', ['Git'])}")
+    skills_list = data.get('skills', ['Git'])  # Get list of skills
+    if isinstance(skills_list, str):
+        skills_list = [skills_list]  # Convert to list if single string
+
+    skills_filled = 0
+
+    # Method 1: React Select Input Interaction - Loop through each skill
     try:
-        # Find the input within the react-select container
-        # Often it has an ID like 'react-select-2-input' or class 'react-select__input'
-        skill_input = driver.find_element(By.CSS_SELECTOR, "input[id^='react-select-']")
-        if not skill_input.is_displayed():
-             # Sometimes the input is hidden, find the container
-             container = driver.find_element(By.CSS_SELECTOR, "[class*='control']")
-             container.click()
-             skill_input = driver.switch_to.active_element
-        
-        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", skill_input)
-        
-        # Click to open menu
-        try:
-            skill_input.click()
-        except:
-            driver.execute_script("arguments[0].click();", skill_input)
-        time.sleep(1)
-        
-        # Determine what to select: if data['skill_ids'] is short/numeric, just pick first option
-        # otherwise try to type it
-        val = str(data.get('skill_ids',''))
-        if len(val) > 2 and not val.isdigit():
-             skill_input.send_keys(val)
-             time.sleep(1)
-             skill_input.send_keys(Keys.ENTER)
-        else:
-             # Just pick the first available option
-             skill_input.send_keys(" ")
-             time.sleep(1)
-             actions = ActionChains(driver)
-             actions.send_keys(Keys.ARROW_DOWN).send_keys(Keys.ENTER).perform()
-             
-        print("[VTU] Interacted with Skills UI")
-        skills_filled = True
+        for skill in skills_list:
+            try:
+                # Re-find the input for each skill (DOM might change after selection)
+                time.sleep(0.5)  # Wait for any animations
+
+                # Try multiple selectors
+                skill_input = None
+                input_selectors = [
+                    "input[id^='react-select-']",
+                    "div[class*='react-select'] input",
+                    "input[role='combobox']"
+                ]
+
+                for selector in input_selectors:
+                    try:
+                        skill_input = driver.find_element(By.CSS_SELECTOR, selector)
+                        if skill_input.is_displayed():
+                            break
+                    except:
+                        continue
+
+                if not skill_input:
+                    print(f"[VTU] Could not find skills input for '{skill}'")
+                    continue
+
+                # Scroll into view
+                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", skill_input)
+                time.sleep(0.3)
+
+                # Click to focus and open dropdown
+                driver.execute_script("arguments[0].click();", skill_input)
+                time.sleep(0.5)
+
+                # Type the skill name to filter dropdown
+                skill_input.send_keys(skill)
+                time.sleep(1.5)  # Wait longer for dropdown to filter
+
+                # Look for the dropdown option and click it
+                try:
+                    # Try to find the option in the dropdown menu
+                    option_selectors = [
+                        (By.XPATH, f"//div[contains(@class, 'react-select__option') and contains(text(), '{skill}')]"),
+                        (By.CSS_SELECTOR, f"div[class*='react-select__option']")
+                    ]
+
+                    option_found = False
+                    for by, selector in option_selectors:
+                        try:
+                            options = driver.find_elements(by, selector)
+                            if options:
+                                # Click first visible option
+                                for opt in options:
+                                    if opt.is_displayed() and skill.lower() in opt.text.lower():
+                                        opt.click()
+                                        option_found = True
+                                        break
+                            if option_found:
+                                break
+                        except:
+                            continue
+
+                    # Fallback: just press Enter if option not found
+                    if not option_found:
+                        skill_input.send_keys(Keys.ENTER)
+
+                except:
+                    # If clicking fails, press Enter
+                    skill_input.send_keys(Keys.ENTER)
+
+                time.sleep(0.5)
+
+                print(f"[VTU] Selected skill: {skill}")
+                skills_filled += 1
+
+            except Exception as e:
+                print(f"[VTU] Failed to select skill '{skill}': {e}")
+                continue
+
+        if skills_filled > 0:
+            print(f"[VTU] Successfully selected {skills_filled}/{len(skills_list)} skills")
     except Exception as e:
         print(f"[VTU] Skills UI interaction failed: {e}")
 
-    # Method 2: Fallback HIDDEN input force
-    if not skills_filled:
+    # Method 2: Fallback - if no skills were filled, try first skill only
+    if skills_filled == 0:
         try:
-            driver.execute_script(f"""
-                const el = document.getElementsByName('skill_ids')[0];
-                if (el) {{
-                    el.value = '{data['skill_ids']}';
-                    el.dispatchEvent(new Event('input', {{bubbles:true}}));
-                    el.dispatchEvent(new Event('change', {{bubbles:true}}));
-                }}
-            """)
-            print("[VTU] Forced hidden skill_ids value")
+            print(f"[VTU] Fallback: Attempting to select first skill only")
+            skill_input = driver.find_element(By.CSS_SELECTOR, "input[id^='react-select-']")
+            skill_input.click()
+            time.sleep(0.5)
+            skill_input.send_keys(Keys.ARROW_DOWN)
+            skill_input.send_keys(Keys.ENTER)
+            print("[VTU] Selected default skill via fallback")
         except:
+            print("[VTU] ⚠ Could not fill skills field")
             pass
 
     # Submit Button - Aggressive Finding & Clicking
@@ -177,10 +226,18 @@ def _fill_once(driver, wait, data, dry_run):
                 continue
                 
         if not submit_btn:
-             # Last resort: find any button with 'Save'
+             # Last resort: find any button with 'Save' or 'Submit'
              try:
-                 submit_btn = driver.find_element(By.XPATH, "//button[contains(., 'Save')]")
+                 submit_btn = driver.find_element(By.XPATH, "//button[contains(., 'Save') or contains(., 'Submit')]")
              except:
+                 # Debug: Print all buttons on page
+                 print("[VTU] Debug: Available buttons:")
+                 all_buttons = driver.find_elements(By.TAG_NAME, "button")
+                 for btn in all_buttons[:10]:  # Limit to first 10
+                     try:
+                         print(f"  - Text: '{btn.text}' | Type: {btn.get_attribute('type')} | Visible: {btn.is_displayed()}")
+                     except:
+                         pass
                  raise NoSuchElementException("Submit/Save button not found")
 
         # Ensure enabled

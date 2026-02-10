@@ -1,4 +1,16 @@
+import { credentialHeaders } from './credentials'
+
 const BASE = '/api'
+
+/** Inject client-side credentials into every fetch call */
+function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+  const creds = credentialHeaders()
+  const existing = (opts.headers || {}) as Record<string, string>
+  return fetch(url, {
+    ...opts,
+    headers: { ...existing, ...creds },
+  })
+}
 
 export interface DiaryEntry {
   id: string
@@ -70,7 +82,7 @@ export interface HistoryEntry {
 export async function uploadFile(file: File): Promise<{ upload_id: string }> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`${BASE}/upload-file`, { method: 'POST', body: form })
+  const res = await authFetch(`${BASE}/upload-file`, { method: 'POST', body: form })
   if (!res.ok) throw new Error((await res.json()).detail)
   return res.json()
 }
@@ -78,7 +90,7 @@ export async function uploadFile(file: File): Promise<{ upload_id: string }> {
 export async function uploadText(text: string): Promise<{ upload_id: string }> {
   const form = new FormData()
   form.append('text', text)
-  const res = await fetch(`${BASE}/upload-text`, { method: 'POST', body: form })
+  const res = await authFetch(`${BASE}/upload-text`, { method: 'POST', body: form })
   if (!res.ok) throw new Error((await res.json()).detail)
   return res.json()
 }
@@ -94,7 +106,7 @@ export async function generatePreview(
   form.append('date_range', dateRange)
   form.append('skip_weekends', String(skipWeekends))
   form.append('skip_holidays', String(skipHolidays))
-  const res = await fetch(`${BASE}/generate-preview`, { method: 'POST', body: form })
+  const res = await authFetch(`${BASE}/generate-preview`, { method: 'POST', body: form })
   if (!res.ok) throw new Error((await res.json()).detail)
   return res.json()
 }
@@ -104,7 +116,7 @@ export async function approveAndSubmit(
   entries: DiaryEntry[],
   dryRun: boolean
 ): Promise<{ progress_id: string }> {
-  const res = await fetch(`${BASE}/approve-and-submit`, {
+  const res = await authFetch(`${BASE}/approve-and-submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -118,19 +130,19 @@ export async function approveAndSubmit(
 }
 
 export async function getProgress(progressId: string): Promise<ProgressData> {
-  const res = await fetch(`${BASE}/progress/${progressId}`)
+  const res = await authFetch(`${BASE}/progress/${progressId}`)
   if (!res.ok) throw new Error('Failed to fetch progress')
   return res.json()
 }
 
 export async function getHistory(limit = 50): Promise<{ total: number; submissions: HistoryEntry[] }> {
-  const res = await fetch(`${BASE}/history?limit=${limit}`)
+  const res = await authFetch(`${BASE}/history?limit=${limit}`)
   if (!res.ok) throw new Error('Failed to fetch history')
   return res.json()
 }
 
 export async function getHistoryStats(): Promise<HistoryStats> {
-  const res = await fetch(`${BASE}/history/stats`)
+  const res = await authFetch(`${BASE}/history/stats`)
   if (!res.ok) throw new Error('Failed to fetch stats')
   return res.json()
 }

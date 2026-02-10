@@ -82,3 +82,13 @@ ENABLE_VERIFICATION = os.getenv("ENABLE_VERIFICATION", "true").lower() == "true"
 ENABLE_SCREENSHOTS = os.getenv("ENABLE_SCREENSHOTS", "true").lower() == "true"
 ENABLE_CACHING = os.getenv("ENABLE_CACHING", "true").lower() == "true"
 DRY_RUN_DEFAULT = os.getenv("DRY_RUN_DEFAULT", "false").lower() == "true"
+
+
+def get_effective_setting(env_value, header_value=None):
+    """Return header value (client-side) if provided, else env var.
+
+    Priority: request header > environment variable
+    """
+    if header_value:
+        return header_value
+    return env_value

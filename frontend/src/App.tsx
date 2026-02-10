@@ -1,5 +1,5 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -7,6 +7,7 @@ import {
   Eye,
   Rocket,
   History,
+  Settings,
   Zap,
   Moon,
   Sun,
@@ -17,6 +18,9 @@ import UploadPage from './pages/Upload'
 import Preview from './pages/Preview'
 import Progress from './pages/Progress'
 import HistoryPage from './pages/History'
+import SettingsPage from './pages/Settings'
+import Modal from './components/Modal'
+import { isConfigured } from './lib/credentials'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -28,12 +32,23 @@ const navItems = [
 
 export default function App() {
   const [dark, setDark] = useState(true)
+  const [showConfigPrompt, setShowConfigPrompt] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
 
   const toggleTheme = () => {
     setDark(!dark)
     document.documentElement.classList.toggle('dark')
   }
+
+  // Check if AI is configured on first load (once per session)
+  useEffect(() => {
+    if (sessionStorage.getItem('config_checked')) return
+    sessionStorage.setItem('config_checked', 'true')
+    if (!isConfigured()) {
+      setShowConfigPrompt(true)
+    }
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -75,6 +90,23 @@ export default function App() {
               {label}
             </NavLink>
           ))}
+
+          {/* Settings — separated at bottom of nav */}
+          <div className="pt-2 mt-2 border-t border-border">
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`
+              }
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </NavLink>
+          </div>
         </nav>
 
         {/* Footer */}
@@ -109,10 +141,26 @@ export default function App() {
               <Route path="/preview" element={<Preview />} />
               <Route path="/launch" element={<Progress />} />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Config prompt modal — shown once per session if AI not configured */}
+      <Modal
+        open={showConfigPrompt}
+        onClose={() => setShowConfigPrompt(false)}
+        title="Configure AI Provider"
+        variant="warning"
+        message="No AI API keys found. You need at least one LLM API key to generate diary entries. Set it up in Settings."
+        confirmLabel="Go to Settings"
+        cancelLabel="Later"
+        onConfirm={() => {
+          setShowConfigPrompt(false)
+          navigate('/settings')
+        }}
+      />
     </div>
   )
 }

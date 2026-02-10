@@ -7,8 +7,9 @@ VTU-sel/
 ├── frontend/          # React frontend (Vite + TypeScript)
 ├── backend/           # Python backend (FastAPI)
 ├── static/            # Built frontend assets
-├── .env.example       # Environment template
-└── run.py             # Main entry point
+├── .env.example       # Server-side config (optional)
+├── docker-compose.yml # Full-stack Docker setup
+└── Dockerfile         # Backend container
 ```
 
 ## Development Setup

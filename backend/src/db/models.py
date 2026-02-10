@@ -107,3 +107,42 @@ class ProcessingQueue(Base):
 
     def __repr__(self):
         return f"<ProcessingQueue {self.job_id} - {self.status}>"
+
+
+class AppSettings(Base):
+    """Application settings (single row, id=1)"""
+
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+
+    # LLM API Keys
+    openai_api_key = Column(String(500), nullable=True)
+    gemini_api_key = Column(String(500), nullable=True)
+    cerebras_api_key = Column(String(500), nullable=True)
+    groq_api_key = Column(String(500), nullable=True)
+    llm_provider = Column(String(50), default="auto")
+
+    # Portal Credentials
+    vtu_username = Column(String(200), nullable=True)
+    vtu_password = Column(String(500), nullable=True)
+
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @classmethod
+    def get(cls, session: Session) -> "AppSettings":
+        settings = session.query(cls).filter_by(id=1).first()
+        if not settings:
+            settings = cls(id=1)
+            session.add(settings)
+            session.commit()
+        return settings
+
+    @classmethod
+    def update(cls, session: Session, **kwargs) -> "AppSettings":
+        settings = cls.get(session)
+        for key, value in kwargs.items():
+            if hasattr(settings, key):
+                setattr(settings, key, value)
+        session.commit()
+        return settings

@@ -11,10 +11,13 @@ import {
 } from 'lucide-react'
 import PlausibilityGauge from '@/components/PlausibilityGauge'
 import EntryCard from '@/components/EntryCard'
+import Modal from '@/components/Modal'
+import { useModal } from '@/lib/useModal'
 import { approveAndSubmit, type DiaryEntry, type PreviewResponse } from '@/lib/api'
 
 export default function Preview() {
   const navigate = useNavigate()
+  const { modalState, showAlert, closeModal } = useModal()
   const [data, setData] = useState<PreviewResponse | null>(null)
   const [entries, setEntries] = useState<DiaryEntry[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -67,7 +70,7 @@ export default function Preview() {
       sessionStorage.setItem('progress_total', String(approved.length))
       navigate('/launch')
     } catch (e: any) {
-      alert(e.message)
+      showAlert(e.message || 'Launch failed', 'Error', 'error')
     } finally {
       setLaunching(false)
     }
@@ -212,6 +215,8 @@ export default function Preview() {
             ? `Dry Run ${selected.size} Entries`
             : `Launch ${selected.size} Entries`}
       </motion.button>
+
+      <Modal {...modalState} onClose={closeModal} />
     </div>
   )
 }

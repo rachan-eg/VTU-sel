@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import {
@@ -10,9 +10,11 @@ import {
   ToggleLeft,
   ToggleRight,
   ArrowRight,
+  Settings,
 } from 'lucide-react'
 import FileDropzone from '@/components/FileDropzone'
 import CalendarPicker from '@/components/CalendarPicker'
+import { isConfigured } from '@/lib/credentials'
 import { uploadFile, uploadText, generatePreview } from '@/lib/api'
 
 // Helper to get saved state
@@ -293,6 +295,17 @@ export default function UploadPage() {
         >
           {error}
         </motion.div>
+      )}
+
+      {/* Configure AI warning */}
+      {!isConfigured() && (
+        <div className="flex items-center gap-2 text-xs text-orange-400">
+          <Settings className="w-3.5 h-3.5" />
+          <span>No AI provider configured.</span>
+          <Link to="/settings" className="underline hover:text-orange-300">
+            Set up in Settings
+          </Link>
+        </div>
       )}
 
       {/* Generate button */}

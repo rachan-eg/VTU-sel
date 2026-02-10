@@ -10,8 +10,10 @@ import {
   ArrowRight,
   Skull,
   Activity,
+  Settings,
 } from 'lucide-react'
 import { getHistoryStats, type HistoryStats } from '@/lib/api'
+import { isConfigured } from '@/lib/credentials'
 
 function StatCard({
   label,
@@ -78,12 +80,23 @@ export default function Dashboard() {
             It generates months of perfectly plausible, evaluator-satisfying diary entries in seconds.
             Parallel browser swarm submits them all while you watch.
           </p>
-          <Link
-            to="/upload"
-            className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            Start Generating <ArrowRight className="w-4 h-4" />
-          </Link>
+          <div className="flex items-center gap-3 mt-6">
+            <Link
+              to="/upload"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Start Generating <ArrowRight className="w-4 h-4" />
+            </Link>
+            {!isConfigured() && (
+              <Link
+                to="/settings"
+                className="inline-flex items-center gap-2 px-4 py-2.5 border border-orange-500/30 text-orange-400 rounded-lg text-xs font-medium hover:bg-orange-500/10 transition-colors"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Configure AI
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 

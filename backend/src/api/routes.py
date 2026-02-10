@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 
 from src.input import InputRouter, normalize_input_data
@@ -14,6 +14,8 @@ from src.ai.agent import DiaryGenerationAgent
 from src.automation import ParallelSubmissionEngine
 from src.db import get_db, SubmissionHistory
 from src.plausibility import PlausibilityEngine
+from config import get_effective_setting
+import config as app_config
 from .models import (
     DiaryEntryPreview,
     GeneratePreviewResponse,
@@ -28,6 +30,40 @@ router = APIRouter()
 # Global storage
 progress_trackers = {}
 preview_sessions = {}  # Store generated entries before approval
+
+
+def extract_credentials(request: Request) -> Dict[str, Optional[str]]:
+    """Extract client-side credentials from request headers.
+
+    Headers sent by frontend (from localStorage):
+      X-Groq-Key, X-Gemini-Key, X-Cerebras-Key, X-Openai-Key,
+      X-LLM-Provider, X-Portal-User, X-Portal-Pass
+
+    Returns effective values: header > env var.
+    """
+    return {
+        "groq_api_key": get_effective_setting(
+            app_config.GROQ_API_KEY, request.headers.get("x-groq-key")
+        ),
+        "gemini_api_key": get_effective_setting(
+            app_config.GEMINI_API_KEY, request.headers.get("x-gemini-key")
+        ),
+        "cerebras_api_key": get_effective_setting(
+            app_config.CEREBRAS_API_KEY, request.headers.get("x-cerebras-key")
+        ),
+        "openai_api_key": get_effective_setting(
+            app_config.OPENAI_API_KEY, request.headers.get("x-openai-key")
+        ),
+        "llm_provider": get_effective_setting(
+            app_config.LLM_PROVIDER, request.headers.get("x-llm-provider")
+        ),
+        "portal_user": get_effective_setting(
+            app_config.VTU_USERNAME, request.headers.get("x-portal-user")
+        ),
+        "portal_pass": get_effective_setting(
+            app_config.VTU_PASSWORD, request.headers.get("x-portal-pass")
+        ),
+    }
 
 
 class BulkSubmitResponse(BaseModel):
@@ -134,6 +170,7 @@ async def upload_text(text: str = Form(...)):
 
 @router.post("/api/generate-preview", response_model=GeneratePreviewResponse)
 async def generate_preview(
+    request: Request,
     upload_id: str = Form(...),
     date_range: str = Form(...),
     skip_weekends: bool = Form(True),
@@ -164,8 +201,9 @@ async def generate_preview(
 
         logger.info(f"Generating entries for {len(dates)} dates")
 
-        # Generate entries with AI
-        agent = DiaryGenerationAgent()
+        # Generate entries with AI (pass client-side credentials)
+        creds = extract_credentials(request)
+        agent = DiaryGenerationAgent(credentials=creds)
 
         if len(normalized) == 1:
             result = agent.generate_bulk(normalized[0]["raw_text"], dates)
@@ -230,6 +268,7 @@ async def generate_preview(
 
 @router.post("/api/approve-and-submit")
 async def approve_and_submit(
+    raw_request: Request,
     request: ApproveAndSubmitRequest,
     background_tasks: BackgroundTasks
 ):
@@ -245,6 +284,9 @@ async def approve_and_submit(
         if session_id not in preview_sessions:
             raise HTTPException(status_code=404, detail="Session not found")
 
+        # Extract client-side portal credentials
+        creds = extract_credentials(raw_request)
+
         # Create progress tracker
         progress_id = str(uuid.uuid4())
         progress_trackers[progress_id] = {
@@ -255,12 +297,13 @@ async def approve_and_submit(
             "status": "processing"
         }
 
-        # Start background submission
+        # Start background submission with credentials
         background_tasks.add_task(
             submit_approved_entries,
             progress_id,
             request.approved_entries,
-            request.dry_run
+            request.dry_run,
+            creds
         )
 
         return {
@@ -499,7 +542,8 @@ async def process_bulk_task(session_id: str, file_path: str, dates: list, dry_ru
 async def submit_approved_entries(
     progress_id: str,
     entries: list[DiaryEntryPreview],
-    dry_run: bool
+    dry_run: bool,
+    credentials: Dict[str, Optional[str]] = None
 ):
     """Background task for submitting approved entries"""
     tracker = progress_trackers[progress_id]
@@ -519,8 +563,8 @@ async def submit_approved_entries(
         # Convert to dict format for engine
         entries_dict = [e.dict() for e in entries]
 
-        # Create submission engine (Selenium-based, synchronous)
-        engine = ParallelSubmissionEngine()
+        # Create submission engine with client-side credentials
+        engine = ParallelSubmissionEngine(credentials=credentials)
 
         # Submit in background with progress updates
         tracker["current"] = "Initializing browser sessions..."

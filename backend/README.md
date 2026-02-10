@@ -6,39 +6,47 @@ FastAPI backend for VTU Diary Automation.
 
 ```
 backend/
-├── app.py              # Main FastAPI application
-├── config.py               # Configuration management
+├── app.py                  # Main FastAPI application
+├── config.py               # Env var config + get_effective_setting()
 ├── requirements.txt        # Python dependencies
-├── src/                    # Source code modules
+├── src/
 │   ├── ai/                 # AI/LLM integration
-│   ├── api/                # REST API routes & models
+│   ├── api/
+│   │   └── routes.py       # Endpoints + extract_credentials()
 │   ├── automation/         # Browser automation (Playwright)
 │   ├── input/              # File processing (CSV, audio, PDF)
 │   ├── db/                 # Database models & session
-│   └── utils/              # Utilities (logging, etc.)
+│   └── utils/              # Logging
 ├── system_prompts/         # AI prompt templates
-├── data/                   # Runtime data storage
+├── data/                   # Runtime data
 ├── logs/                   # Application logs
-├── sessions/               # Browser session data
-└── tests/                  # Unit & integration tests
+└── tests/                  # Tests
 ```
 
 ## Running
 
-**From backend directory:**
 ```bash
 cd backend
-python app.py
+python app.py               # http://localhost:5000
 ```
 
-**With Docker:**
-```bash
-# Run from project root
-cd ..
-docker-compose up --build
-```
+## Credential Flow
 
-See [../docker-compose.yml](../docker-compose.yml) for the full Docker setup.
+The backend is **stateless** for credentials. It reads them from request headers (sent by the browser) with env var fallback:
+
+| Header | Config Fallback | Used By |
+|--------|----------------|---------|
+| `X-Groq-Key` | `GROQ_API_KEY` | LLM client |
+| `X-Gemini-Key` | `GEMINI_API_KEY` | LLM client |
+| `X-Cerebras-Key` | `CEREBRAS_API_KEY` | LLM client |
+| `X-Openai-Key` | `OPENAI_API_KEY` | LLM client |
+| `X-LLM-Provider` | `LLM_PROVIDER` | LLM client |
+| `X-Portal-User` | `VTU_EMAIL` | Submission engine |
+| `X-Portal-Pass` | `VTU_PASSWORD` | Submission engine |
+
+Priority: **Header > Environment variable**
+
+This allows each user to bring their own API keys without sharing credentials on the server.
 
 ## API Endpoints
 
@@ -46,37 +54,26 @@ See [../docker-compose.yml](../docker-compose.yml) for the full Docker setup.
 - `GET /health` - Health check
 - `POST /api/upload-file` - Upload file for processing
 - `POST /api/upload-text` - Upload raw text
-- `POST /api/generate-preview` - Generate diary entries
-- `POST /api/approve-and-submit` - Submit entries to VTU portal
-- `GET /api/progress/{id}` - Get submission progress
-- `GET /api/history` - Get submission history
-- `WS /ws/progress/{id}` - WebSocket for real-time progress
-
-API docs available at `/docs` when running.
+- `POST /api/generate-preview` - Generate diary entries (reads LLM credential headers)
+- `POST /api/approve-and-submit` - Submit to portal (reads portal credential headers)
+- `GET /api/progress/{id}` - Submission progress
+- `GET /api/history` - Submission history
+- `WS /ws/progress/{id}` - WebSocket progress
+- `GET /docs` - Swagger API docs
 
 ## Configuration
 
-Configuration is loaded from:
-1. `.env` file in project root
-2. Environment variables
+1. Request headers (from browser localStorage)
+2. `.env` file in project root
 3. `config.py` defaults
 
-See [../.env.example](../.env.example) for all configuration options.
+See [../.env.example](../.env.example) for server-side options.
 
 ## Development
 
 ```bash
-# Install dependencies
 cd backend
 pip install -r requirements.txt
 playwright install chromium
-
-# Run with hot reload
 python app.py
-```
-
-## Testing
-
-```bash
-pytest tests/
 ```

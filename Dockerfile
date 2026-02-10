@@ -27,7 +27,7 @@ COPY backend/ backend/
 # Create directories for runtime data
 RUN mkdir -p backend/data backend/logs backend/screenshots backend/input
 
-# Copy environment files
+# Copy environment files (optional — credentials can be set per-user in browser Settings)
 COPY .env* ./
 
 # Create non-root user

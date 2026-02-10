@@ -14,9 +14,12 @@ import {
 import { getHistory, approveAndSubmit, type HistoryEntry, type DiaryEntry } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import PlausibilityGauge from '@/components/PlausibilityGauge'
+import Modal from '@/components/Modal'
+import { useModal } from '@/lib/useModal'
 
 export default function HistoryPage() {
   const navigate = useNavigate()
+  const { modalState, showAlert, closeModal } = useModal()
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [retrying, setRetrying] = useState(false)
@@ -102,7 +105,7 @@ export default function HistoryPage() {
       sessionStorage.setItem('progress_total', String(retryEntries.length))
       navigate('/launch')
     } catch (e: any) {
-      alert(e.message || 'Retry failed')
+      showAlert(e.message || 'Retry failed', 'Error', 'error')
     } finally {
       setRetrying(false)
     }
@@ -270,6 +273,8 @@ export default function HistoryPage() {
           </table>
         </div>
       )}
+
+      <Modal {...modalState} onClose={closeModal} />
     </div>
   )
 }

@@ -38,7 +38,7 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card flex flex-col shrink-0">
+      <aside className="w-50 border-r border-border bg-card flex flex-col shrink-0">
         {/* Logo */}
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-3">

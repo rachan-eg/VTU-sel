@@ -8,6 +8,7 @@ import {
   Loader2,
   PartyPopper,
   ArrowRight,
+  RotateCw,
 } from 'lucide-react'
 import BrowserSwarm from '@/components/BrowserSwarm'
 import { getProgress, type ProgressData, type BrowserState } from '@/lib/api'
@@ -203,6 +204,19 @@ export default function Progress() {
           animate={{ opacity: 1, y: 0 }}
           className="flex gap-3 justify-center"
         >
+          {progress && progress.failed > 0 && (
+            <button
+              onClick={() => {
+                navigate('/history')
+                setTimeout(() => {
+                  document.querySelector('[data-filter="failed"]')?.scrollIntoView({ behavior: 'smooth' })
+                }, 500)
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-destructive/10 text-destructive rounded-lg text-sm font-medium hover:bg-destructive/20"
+            >
+              <RotateCw className="w-4 h-4" /> Retry {progress.failed} Failed
+            </button>
+          )}
           <button
             onClick={() => navigate('/history')}
             className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"

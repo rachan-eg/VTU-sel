@@ -15,31 +15,73 @@ import FileDropzone from '@/components/FileDropzone'
 import CalendarPicker from '@/components/CalendarPicker'
 import { uploadFile, uploadText, generatePreview } from '@/lib/api'
 
+// Helper to get saved state
+const getSavedState = () => {
+  try {
+    const saved = localStorage.getItem('upload_form_state')
+    return saved ? JSON.parse(saved) : {}
+  } catch {
+    return {}
+  }
+}
+
 export default function UploadPage() {
   const navigate = useNavigate()
-  const [inputMode, setInputMode] = useState<'file' | 'text'>('file')
-  const [dateMode, setDateMode] = useState<'range' | 'calendar'>('calendar')
+
+  // Load saved state once
+  const saved = getSavedState()
+
+  // Initialize state with saved values or defaults
+  const [inputMode, setInputMode] = useState<'file' | 'text'>(saved.inputMode || 'file')
+  const [dateMode, setDateMode] = useState<'range' | 'calendar'>(saved.dateMode || 'calendar')
   const [file, setFile] = useState<File | null>(null)
-  const [text, setText] = useState('')
-
-  // Range mode
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-
-  // Calendar mode
-  const [selectedDates, setSelectedDates] = useState<Date[]>([new Date()])
-
-  const [skipWeekends, setSkipWeekends] = useState(true)
-  const [skipHolidays, setSkipHolidays] = useState(true)
+  const [uploadId, setUploadId] = useState<string>(saved.uploadId || '')
+  const [text, setText] = useState(saved.text || '')
+  const [dateFrom, setDateFrom] = useState(saved.dateFrom || '')
+  const [dateTo, setDateTo] = useState(saved.dateTo || '')
+  const [selectedDates, setSelectedDates] = useState<Date[]>(
+    saved.selectedDates?.length > 0
+      ? saved.selectedDates.map((d: string) => new Date(d))
+      : [new Date()]
+  )
+  const [skipWeekends, setSkipWeekends] = useState(saved.skipWeekends ?? true)
+  const [skipHolidays, setSkipHolidays] = useState(saved.skipHolidays ?? true)
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
-  const hasInput = inputMode === 'file' ? !!file : text.trim().length > 10
-  const hasDates =
-    dateMode === 'range'
-      ? dateFrom && dateTo
-      : selectedDates.length > 0
+  // Save state to localStorage
+  useEffect(() => {
+    const state = {
+      text,
+      uploadId,
+      dateFrom,
+      dateTo,
+      selectedDates: selectedDates.map((d) => d.toISOString()),
+      inputMode,
+      dateMode,
+      skipWeekends,
+      skipHolidays,
+    }
+    localStorage.setItem('upload_form_state', JSON.stringify(state))
+  }, [text, uploadId, dateFrom, dateTo, selectedDates, inputMode, dateMode, skipWeekends, skipHolidays])
 
+  // Auto-upload file when dropped
+  const handleFileSelect = async (f: File) => {
+    setFile(f)
+    setUploading(true)
+    try {
+      const res = await uploadFile(f)
+      setUploadId(res.upload_id)
+    } catch (e: any) {
+      setError(e.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const hasInput = inputMode === 'file' ? !!file || !!uploadId : text.trim().length > 10
+  const hasDates = dateMode === 'range' ? dateFrom && dateTo : selectedDates.length > 0
   const canSubmit = hasInput && hasDates
 
   const handleGenerate = async () => {
@@ -48,30 +90,31 @@ export default function UploadPage() {
     setError('')
 
     try {
-      // Step 1: Upload
-      let uploadId: string
-      if (inputMode === 'file' && file) {
+      let finalUploadId = uploadId
+
+      // If file mode but no uploadId yet, upload now
+      if (inputMode === 'file' && !uploadId && file) {
         const res = await uploadFile(file)
-        uploadId = res.upload_id
-      } else {
-        const res = await uploadText(text)
-        uploadId = res.upload_id
+        finalUploadId = res.upload_id
+        setUploadId(finalUploadId)
       }
 
-      // Step 2: Generate preview
+      // If text mode, upload text
+      if (inputMode === 'text') {
+        const res = await uploadText(text)
+        finalUploadId = res.upload_id
+      }
+
+      // Generate preview
       let dateRange: string
       if (dateMode === 'range') {
         dateRange = `${dateFrom} to ${dateTo}`
       } else {
-        // Convert selected dates to range format
         const sorted = selectedDates.sort((a, b) => a.getTime() - b.getTime())
-        const formatted = sorted.map((d) => format(d, 'yyyy-MM-dd')).join(',')
-        dateRange = formatted
+        dateRange = sorted.map((d) => format(d, 'yyyy-MM-dd')).join(',')
       }
 
-      const preview = await generatePreview(uploadId, dateRange, skipWeekends, skipHolidays)
-
-      // Store in sessionStorage and navigate
+      const preview = await generatePreview(finalUploadId, dateRange, skipWeekends, skipHolidays)
       sessionStorage.setItem('preview_data', JSON.stringify(preview))
       navigate('/preview')
     } catch (e: any) {
@@ -115,7 +158,25 @@ export default function UploadPage() {
         transition={{ duration: 0.2 }}
       >
         {inputMode === 'file' ? (
-          <FileDropzone file={file} onFile={setFile} />
+          <div className="relative">
+            <FileDropzone
+              file={file}
+              onFile={handleFileSelect}
+              uploadId={uploadId}
+              onClearUpload={() => {
+                setUploadId('')
+                setFile(null)
+              }}
+            />
+            {uploading && (
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <div className="flex items-center gap-2 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="relative">
             <textarea
@@ -139,7 +200,6 @@ export default function UploadPage() {
             <span className="text-sm font-medium">Select Dates</span>
           </div>
 
-          {/* Date mode toggle */}
           <div className="flex gap-1 text-xs">
             {(['range', 'calendar'] as const).map((dm) => (
               <button
@@ -238,12 +298,12 @@ export default function UploadPage() {
       {/* Generate button */}
       <button
         onClick={handleGenerate}
-        disabled={!canSubmit || loading}
+        disabled={!canSubmit || loading || uploading}
         className={`
           w-full flex items-center justify-center gap-3 py-4 rounded-xl text-sm font-bold
           transition-all duration-300
           ${
-            canSubmit && !loading
+            canSubmit && !loading && !uploading
               ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white hover:shadow-lg hover:shadow-red-500/25 hover:scale-[1.01]'
               : 'bg-muted text-muted-foreground cursor-not-allowed'
           }
@@ -253,6 +313,11 @@ export default function UploadPage() {
           <>
             <Loader2 className="w-4 h-4 animate-spin" />
             AI is generating entries...
+          </>
+        ) : uploading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Uploading file...
           </>
         ) : (
           <>

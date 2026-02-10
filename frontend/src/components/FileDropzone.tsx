@@ -10,11 +10,15 @@ import {
   FileVideo,
   GitBranch,
   File,
+  CheckCircle2,
+  X,
 } from 'lucide-react'
 
 interface Props {
   onFile: (file: File) => void
   file: File | null
+  uploadId?: string
+  onClearUpload?: () => void
 }
 
 const typeConfig: Record<string, { icon: typeof File; label: string; color: string }> = {
@@ -37,7 +41,7 @@ function getFileConfig(file: File) {
   return { icon: File, label: 'File', color: 'text-zinc-400' }
 }
 
-export default function FileDropzone({ onFile, file }: Props) {
+export default function FileDropzone({ onFile, file, uploadId, onClearUpload }: Props) {
   const onDrop = useCallback((accepted: File[]) => {
     if (accepted.length > 0) onFile(accepted[0])
   }, [onFile])
@@ -56,6 +60,8 @@ export default function FileDropzone({ onFile, file }: Props) {
     },
   })
 
+  const hasUpload = file || uploadId
+
   return (
     <div
       {...getRootProps()}
@@ -64,7 +70,7 @@ export default function FileDropzone({ onFile, file }: Props) {
         transition-all duration-300 group
         ${isDragActive
           ? 'border-primary bg-primary/5 scale-[1.02]'
-          : file
+          : hasUpload
             ? 'border-green-500/30 bg-green-500/5'
             : 'border-border hover:border-primary/50 hover:bg-accent/50'
         }
@@ -99,6 +105,37 @@ export default function FileDropzone({ onFile, file }: Props) {
                 </>
               )
             })()}
+          </motion.div>
+        ) : uploadId ? (
+          <motion.div
+            key="saved"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="flex flex-col items-center gap-3"
+          >
+            <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-500">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Previous upload ready</p>
+              <p className="text-xs text-muted-foreground">ID: {uploadId.slice(0, 8)}...</p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <p className="text-xs text-muted-foreground">Click to upload new file</p>
+              {onClearUpload && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onClearUpload()
+                  }}
+                  className="p-1 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                  title="Clear upload"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </motion.div>
         ) : (
           <motion.div

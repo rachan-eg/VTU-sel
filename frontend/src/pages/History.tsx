@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Calendar,
@@ -8,14 +9,17 @@ import {
   Search,
   Download,
   RefreshCw,
+  RotateCw,
 } from 'lucide-react'
-import { getHistory, type HistoryEntry } from '@/lib/api'
+import { getHistory, approveAndSubmit, type HistoryEntry, type DiaryEntry } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import PlausibilityGauge from '@/components/PlausibilityGauge'
 
 export default function HistoryPage() {
+  const navigate = useNavigate()
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [retrying, setRetrying] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'success' | 'failed'>('all')
 
@@ -69,6 +73,41 @@ export default function HistoryPage() {
     URL.revokeObjectURL(url)
   }
 
+  const handleRetryFailed = async () => {
+    const failedEntries = entries.filter((e) => e.status === 'failed')
+    if (failedEntries.length === 0) return
+
+    setRetrying(true)
+    try {
+      // Convert HistoryEntry to DiaryEntry format
+      const retryEntries: DiaryEntry[] = failedEntries.map((e) => ({
+        id: String(e.id),
+        date: e.date,
+        hours: e.hours,
+        activities: e.activities,
+        learnings: e.learnings,
+        blockers: e.blockers || 'None',
+        links: e.links || '',
+        skills: Array.isArray(e.skills) ? e.skills : [],
+        confidence: e.confidence_score || 0.8,
+        editable: true,
+      }))
+
+      // Create temp session and submit
+      const sessionId = 'retry-' + Date.now()
+      const res = await approveAndSubmit(sessionId, retryEntries, false)
+
+      // Navigate to progress
+      sessionStorage.setItem('progress_id', res.progress_id)
+      sessionStorage.setItem('progress_total', String(retryEntries.length))
+      navigate('/launch')
+    } catch (e: any) {
+      alert(e.message || 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -80,6 +119,16 @@ export default function HistoryPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          {totalFailed > 0 && (
+            <button
+              onClick={handleRetryFailed}
+              disabled={retrying}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors disabled:opacity-50"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${retrying ? 'animate-spin' : ''}`} />
+              Retry {totalFailed} Failed
+            </button>
+          )}
           <button
             onClick={loadHistory}
             className="p-2 rounded-lg hover:bg-accent transition-colors"

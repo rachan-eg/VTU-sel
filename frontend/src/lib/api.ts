@@ -59,6 +59,9 @@ export interface HistoryEntry {
   hours: number
   activities: string
   learnings: string
+  blockers: string
+  links: string
+  skills: string[]
   status: string
   confidence_score: number
   submitted_at: string

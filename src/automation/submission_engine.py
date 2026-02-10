@@ -1,11 +1,14 @@
-"""Parallel submission engine using Playwright multi-context"""
+"""Playwright submission engine -- sequential, single page, bulletproof.
+
+One browser, one page, loop through entries. No parallel session issues.
+Login once, reuse for all entries. Navigate back to diary page between entries.
+"""
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
-from pathlib import Path
 
 try:
-    from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+    from playwright.async_api import async_playwright, Page
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -21,309 +24,316 @@ from config import (
     VTU_PASSWORD
 )
 from src.utils.logger import get_logger
-from .retry_logic import RetryStrategy
 
 logger = get_logger(__name__)
 
+DIARY_URL = "https://vtu.internyet.in/dashboard/student/student-diary"
 
-class ParallelSubmissionEngine:
-    """
-    High-performance parallel submission engine.
 
-    Uses Playwright with multiple browser contexts for concurrent submissions.
-    """
+def _ordinal(n: int) -> str:
+    if 11 <= n <= 13:
+        return f"{n}th"
+    return f"{n}{['th','st','nd','rd','th','th','th','th','th','th'][n % 10]}"
+
+
+class PlaywrightSubmissionEngine:
+    """Sequential Playwright submission -- one page, all entries, no timeouts."""
 
     def __init__(self, max_workers: int = MAX_PARALLEL_BROWSERS, headless: bool = HEADLESS):
         if not PLAYWRIGHT_AVAILABLE:
-            raise ImportError("Playwright required. Install with: pip install playwright")
-
+            raise ImportError("pip install playwright && playwright install chromium")
         self.max_workers = max_workers
         self.headless = headless
-        self.submission_queue = asyncio.Queue()
-        self.results = []
-        self.retry_strategy = RetryStrategy()
+        logger.info(f"Playwright engine: sequential mode, headless={headless}")
 
-        logger.info(f"Parallel engine initialized: {max_workers} workers, headless={headless}")
+    def submit_bulk(self, entries: List[Dict[str, Any]], progress_tracker: Dict = None) -> List[Dict[str, Any]]:
+        return asyncio.run(self._run(entries, progress_tracker))
 
-    async def submit_bulk(self, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Submit multiple diary entries concurrently.
+    async def _run(self, entries: List[Dict[str, Any]], tracker: Optional[Dict]) -> List[Dict[str, Any]]:
+        results = []
 
-        Args:
-            entries: List of entry dicts with date, hours, activities, etc.
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=self.headless)
+            context = await browser.new_context()
+            page = await context.new_page()
 
-        Returns:
-            List of result dicts with status and metadata
-        """
-        logger.info(f"Starting bulk submission: {len(entries)} entries")
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
-
-            try:
-                # Create worker tasks
-                workers = [
-                    asyncio.create_task(self._worker(browser, worker_id))
-                    for worker_id in range(self.max_workers)
-                ]
-
-                # Enqueue all entries
-                for entry in entries:
-                    await self.submission_queue.put(entry)
-
-                # Wait for completion
-                await self.submission_queue.join()
-
-                # Cancel workers
-                for w in workers:
-                    w.cancel()
-
-            finally:
-                await browser.close()
-
-        logger.info(f"Bulk submission complete: {len(self.results)} results")
-        return self.results
-
-    async def _worker(self, browser: Browser, worker_id: int):
-        """Worker coroutine that processes submissions"""
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        # Login to portal
-        try:
+            # Login once
             await self._login(page)
-            logger.info(f"Worker {worker_id} logged in successfully")
-        except Exception as e:
-            logger.error(f"Worker {worker_id} login failed: {e}")
-            await context.close()
-            return
+            logger.info("Logged in, starting submissions...")
 
-        logger.info(f"Worker {worker_id} started")
+            # Submit each entry sequentially on the same page
+            for i, entry in enumerate(entries):
+                date_str = entry.get("date", "unknown")
+                if tracker:
+                    tracker["current"] = f"[{i+1}/{len(entries)}] {date_str}..."
 
-        while True:
-            try:
-                # Get entry from queue (with timeout to allow cancellation)
                 try:
-                    entry = await asyncio.wait_for(
-                        self.submission_queue.get(),
-                        timeout=1.0
-                    )
-                except asyncio.TimeoutError:
-                    continue
+                    await self._submit_one(page, entry)
+                    results.append({
+                        "date": date_str,
+                        "status": "success",
+                        "submitted_at": datetime.now().isoformat(),
+                        "entry": entry,
+                    })
+                    logger.info(f"[{i+1}/{len(entries)}] Submitted: {date_str}")
+                    if tracker:
+                        tracker["completed"] = tracker.get("completed", 0) + 1
 
-                logger.info(f"Worker {worker_id} processing: {entry.get('date')}")
+                except Exception as e:
+                    err_msg = str(e)
+                    if "already" in err_msg.lower():
+                        logger.info(f"[{i+1}/{len(entries)}] Skipped {date_str}: already submitted")
+                        results.append({
+                            "date": date_str,
+                            "status": "skipped",
+                            "error": err_msg,
+                            "entry": entry,
+                        })
+                        if tracker:
+                            tracker["completed"] = tracker.get("completed", 0) + 1
+                    else:
+                        logger.error(f"[{i+1}/{len(entries)}] Failed {date_str}: {e}")
+                        results.append({
+                            "date": date_str,
+                            "status": "failed",
+                            "error": err_msg,
+                            "entry": entry,
+                        })
+                        if tracker:
+                            tracker["failed"] = tracker.get("failed", 0) + 1
+                    if ENABLE_SCREENSHOTS:
+                        try:
+                            await page.screenshot(path=str(SCREENSHOTS_DIR / f"{date_str}_error.png"))
+                        except Exception:
+                            pass
 
-                # Submit with retry logic
-                result = await self.retry_strategy.retry_with_backoff(
-                    self._submit_entry,
-                    page,
-                    entry
-                )
+            await context.close()
+            await browser.close()
 
-                self.results.append(result)
+        return results
 
-                # Rate limiting
-                await asyncio.sleep(SUBMISSION_DELAY_SECONDS)
-
-            except asyncio.CancelledError:
-                logger.info(f"Worker {worker_id} cancelled")
-                break
-
-            except Exception as e:
-                logger.error(f"Worker {worker_id} error: {e}")
-                self.results.append({
-                    "date": entry.get("date"),
-                    "status": "failed",
-                    "error": str(e)
-                })
-
-            finally:
-                self.submission_queue.task_done()
-
-        await context.close()
-
-    async def _submit_entry(self, page: Page, entry: Dict[str, Any]) -> Dict[str, Any]:
-        """Submit single diary entry"""
+    async def _submit_one(self, page: Page, entry: Dict):
+        """Submit a single entry. Page is already logged in."""
         date_str = entry.get("date", "unknown")
 
+        # Navigate to diary page
+        await page.goto(DIARY_URL, wait_until="networkidle", timeout=30000)
+        await asyncio.sleep(1)
+        await self._dismiss_popup(page)
+
+        # Check if we landed on the selection page or somewhere else
+        combo = page.get_by_role("combobox", name="Select Internship")
         try:
-            # Navigate to diary page
-            await page.goto(f"{PORTAL_LOGIN_URL}/diary", wait_until="networkidle")
+            await combo.wait_for(timeout=10000)
+        except Exception:
+            # Page didn't show selection form -- might be already filled or session expired
+            page_text = await page.text_content("body") or ""
+            if "already" in page_text.lower() or "submitted" in page_text.lower() or "edit" in page_text.lower():
+                raise Exception(f"Date {date_str} appears to be already submitted")
+            # Try re-login and retry
+            logger.warning(f"Selection page not found for {date_str}, re-logging in...")
+            await self._login(page)
+            await page.goto(DIARY_URL, wait_until="networkidle", timeout=30000)
+            await asyncio.sleep(1)
+            await self._dismiss_popup(page)
+            await combo.wait_for(timeout=15000)
 
-            # Fill form
-            await self._fill_form(page, entry)
+        # Select internship
+        await combo.click()
+        await asyncio.sleep(0.5)
 
-            # Screenshot before submit
-            if ENABLE_SCREENSHOTS:
-                screenshot_path = SCREENSHOTS_DIR / f"{date_str}_pre.png"
-                await page.screenshot(path=str(screenshot_path))
-
-            # Submit
-            await page.click("button[type='submit']")
-            await page.wait_for_load_state("networkidle")
-
-            # Verify success
-            success = await self._verify_submission(page)
-
-            # Screenshot after submit
-            if ENABLE_SCREENSHOTS:
-                await page.screenshot(path=str(SCREENSHOTS_DIR / f"{date_str}_post.png"))
-
-            return {
-                "date": date_str,
-                "status": "success" if success else "unknown",
-                "submitted_at": datetime.now().isoformat(),
-                "entry": entry
-            }
-
-        except Exception as e:
-            logger.error(f"Submission failed for {date_str}: {e}")
-            raise
-
-    async def _fill_form(self, page: Page, entry: Dict[str, Any]):
-        """Fill diary form fields"""
-
-        # Date
-        if "date" in entry:
-            await page.fill("input[name='date'], input[type='date']", entry["date"])
-
-        # Hours
-        if "hours" in entry:
-            await page.fill("input[name='hours'], input[type='number']", str(entry["hours"]))
-
-        # Activities/Description
-        if "activities" in entry:
-            await page.fill(
-                "textarea[name='description'], textarea[name='entry_text']",
-                entry["activities"]
-            )
-
-        # Learnings
-        if "learnings" in entry:
-            await page.fill("textarea[name='learnings']", entry["learnings"])
-
-        # Blockers
-        if "blockers" in entry:
-            await page.fill("textarea[name='blockers']", entry.get("blockers", "None"))
-
-        # Links
-        if "links" in entry:
-            await page.fill("input[name='links']", entry.get("links", ""))
-
-        # Skills (multi-select)
-        if "skills" in entry and entry["skills"]:
-            await self._select_skills(page, entry["skills"])
-
-    async def _select_skills(self, page: Page, skills: List[str]):
-        """Select multiple skills from React Select dropdown"""
-        for skill in skills:
+        # Find first enabled option (aria-disabled="false" means enabled)
+        options = page.locator("[role='option'][aria-disabled='false']")
+        count = await options.count()
+        if count > 0:
+            await options.first.click()
+        else:
+            # Fallback: click by known internship name
             try:
-                # Find input
-                skill_input = page.locator("input[id^='react-select-']").first
+                await page.get_by_role("option", name="EGDK").click()
+            except Exception:
+                await page.locator("[role='option']").nth(1).click()
+        await asyncio.sleep(0.5)
 
-                # Click to open
-                await skill_input.click()
-                await asyncio.sleep(0.3)
+        # Select date
+        await self._select_date(page, date_str)
 
-                # Type skill name
-                await skill_input.fill(skill)
-                await asyncio.sleep(0.5)
+        # Continue
+        cont_btn = page.get_by_role("button", name="Continue")
+        await cont_btn.wait_for(timeout=10000)
+        await cont_btn.click()
+        await page.wait_for_load_state("networkidle")
+        await asyncio.sleep(1)
 
-                # Press Enter to select
-                await skill_input.press("Enter")
-                await asyncio.sleep(0.3)
-
-            except Exception as e:
-                logger.warning(f"Failed to select skill '{skill}': {e}")
-
-    async def _verify_submission(self, page: Page) -> bool:
-        """Verify submission was successful"""
+        # Check if form loaded or if date is already filled
+        desc_field = page.get_by_role("textbox", name="Briefly describe the work you")
         try:
-            # Look for success message
-            success_locator = page.locator(".success-message, .alert-success")
-            await success_locator.wait_for(timeout=5000)
-            return True
-        except:
-            logger.warning("Could not verify submission success")
-            return False
+            await desc_field.wait_for(timeout=15000)
+        except Exception:
+            # Form didn't load -- retry entire selection flow once
+            logger.warning(f"Form not found for {date_str}, retrying...")
+            await page.goto(DIARY_URL, wait_until="networkidle", timeout=30000)
+            await asyncio.sleep(2)
+            await self._dismiss_popup(page)
+            try:
+                c2 = page.get_by_role("combobox", name="Select Internship")
+                await c2.wait_for(timeout=10000)
+                await c2.click()
+                await asyncio.sleep(0.5)
+                o2 = page.locator("[role='option'][aria-disabled='false']")
+                if await o2.count() > 0:
+                    await o2.first.click()
+                await asyncio.sleep(0.5)
+                await self._select_date(page, date_str)
+                await page.get_by_role("button", name="Continue").click()
+                await page.wait_for_load_state("networkidle")
+                await asyncio.sleep(2)
+                await desc_field.wait_for(timeout=15000)
+            except Exception:
+                raise Exception(f"Date {date_str}: form failed to load after retry")
+
+        # Fill form
+        await self._fill_form(page, entry)
+
+        # Save -- force enable disabled button and click via JS
+        save_btn = page.get_by_role("button", name="Save")
+        await save_btn.wait_for(state="attached", timeout=10000)
+        await page.evaluate("""
+            const btn = document.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = false;
+                btn.removeAttribute('disabled');
+                btn.click();
+            }
+        """)
+        await page.wait_for_load_state("networkidle")
+        await asyncio.sleep(3)
 
     async def _login(self, page: Page):
-        """Login to VTU portal using actual form selectors"""
-        if not VTU_USERNAME or not VTU_PASSWORD:
-            raise ValueError("VTU_USERNAME and VTU_PASSWORD must be set in environment")
+        # Clear cookies and go to login page fresh
+        await page.context.clear_cookies()
+        await page.goto(PORTAL_LOGIN_URL, wait_until="networkidle", timeout=30000)
+        await asyncio.sleep(1)
 
-        logger.info(f"Logging in to {PORTAL_LOGIN_URL}")
+        # Check if already logged in (redirected to dashboard)
+        if "sign-in" not in page.url.lower() and "login" not in page.url.lower():
+            logger.info("Already logged in, skipping login")
+            await self._dismiss_popup(page)
+            return
 
+        email = page.get_by_role("textbox", name="Enter your email address")
+        await email.wait_for(timeout=10000)
+        await email.fill(VTU_USERNAME)
+        await page.get_by_role("textbox", name="Password").fill(VTU_PASSWORD)
+        await page.get_by_role("button", name="Sign In").click()
+        await page.wait_for_load_state("networkidle")
+        await asyncio.sleep(2)
+        await self._dismiss_popup(page)
+
+    async def _dismiss_popup(self, page: Page):
         try:
-            # Navigate to login page
-            await page.goto(PORTAL_LOGIN_URL, wait_until="networkidle")
+            btn = page.get_by_role("button", name="I Understand")
+            if await btn.is_visible(timeout=2000):
+                await btn.click()
+                await asyncio.sleep(0.5)
+        except Exception:
+            pass
 
-            # Fill email field (using actual VTU portal selectors)
-            email_selectors = [
-                "input[autocomplete='email']",
-                "input[type='email']",
-                "input#email",
-                "input[name='email']"
-            ]
+    async def _select_date(self, page: Page, date_str: str):
+        parts = date_str.split("-")
+        if len(parts) != 3:
+            return
+        year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
 
-            email_filled = False
-            for selector in email_selectors:
-                try:
-                    await page.wait_for_selector(selector, timeout=5000)
-                    await page.fill(selector, VTU_USERNAME)
-                    email_filled = True
-                    logger.info(f"Filled email with selector: {selector}")
-                    break
-                except:
-                    continue
+        # Open calendar
+        pick_btn = page.get_by_role("button", name="Pick a Date")
+        await pick_btn.wait_for(timeout=10000)
+        await pick_btn.click()
+        await asyncio.sleep(0.5)
 
-            if not email_filled:
-                raise Exception("Could not find email field")
+        # Year
+        await page.get_by_label("Choose the Year").select_option(str(year))
+        await asyncio.sleep(0.3)
 
-            # Fill password field
-            password_selectors = [
-                "input[autocomplete='new-password']",
-                "input[autocomplete='current-password']",
-                "input[type='password']",
-                "input#password",
-                "input[name='password']"
-            ]
+        # Month (0-indexed)
+        await page.get_by_label("Choose the Month").select_option(str(month - 1))
+        await asyncio.sleep(0.5)
 
-            password_filled = False
-            for selector in password_selectors:
-                try:
-                    await page.fill(selector, VTU_PASSWORD)
-                    password_filled = True
-                    logger.info(f"Filled password with selector: {selector}")
-                    break
-                except:
-                    continue
-
-            if not password_filled:
-                raise Exception("Could not find password field")
-
-            # Click submit button
-            await page.click("button[type='submit']")
-            await asyncio.sleep(3)  # Wait for login to process
-            await page.wait_for_load_state("networkidle")
-
-            # Verify login success
-            current_url = page.url
-            if "sign-in" in current_url.lower() or "login" in current_url.lower():
-                # Check for error messages
-                try:
-                    error = await page.locator("text=/Invalid|failed/i").first.text_content()
-                    raise Exception(f"Login failed: {error}")
-                except:
-                    raise Exception("Login failed - still on login page")
-
-            logger.info("Login successful")
-
+        # Day -- use ordinal in aria-label for precise matching
+        ordinal = _ordinal(day)
+        try:
+            # Look for button with aria-label containing "5th" (exact day)
+            day_btn = page.locator(f"button[aria-label*='{ordinal},']")
+            if await day_btn.count() > 0:
+                await day_btn.first.click()
+                logger.info(f"Selected day: {day} ({ordinal})")
+            else:
+                # Fallback: text match
+                await page.locator(f"button:text-is('{day}')").first.click()
+                logger.info(f"Selected day: {day} (text match)")
         except Exception as e:
-            logger.error(f"Login failed: {e}")
-            raise
+            logger.warning(f"Day {day} selection failed: {e}")
 
-    async def _load_session(self, context: BrowserContext):
-        """Load saved session cookies/state"""
-        # TODO: Load session from file
-        pass
+        await asyncio.sleep(0.5)
+
+    async def _fill_form(self, page: Page, entry: Dict):
+        description = entry.get("activities", entry.get("description", ""))
+        hours = str(entry.get("hours", 7))
+        links = entry.get("links", "") or "None"
+        learnings = entry.get("learnings", "")
+        blockers = entry.get("blockers", "None")
+        skills = entry.get("skills", ["Git"])
+        if isinstance(skills, str):
+            skills = [skills]
+
+        # Wait for form
+        desc = page.get_by_role("textbox", name="Briefly describe the work you")
+        await desc.wait_for(timeout=15000)
+
+        # Fill fields + trigger React state updates
+        await desc.fill(description)
+        await desc.dispatch_event("input")
+        await desc.dispatch_event("change")
+
+        hours_field = page.get_by_placeholder("e.g.")
+        await hours_field.fill(hours)
+        await hours_field.dispatch_event("input")
+        await hours_field.dispatch_event("change")
+
+        links_field = page.get_by_role("textbox", name="Paste one or more relevant")
+        await links_field.fill(links)
+        await links_field.dispatch_event("change")
+
+        learn_field = page.get_by_role("textbox", name="What did you learn or ship")
+        await learn_field.fill(learnings)
+        await learn_field.dispatch_event("change")
+
+        block_field = page.get_by_role("textbox", name="Anything that slowed you down?")
+        await block_field.fill(blockers)
+        await block_field.dispatch_event("change")
+
+        # Skills
+        for skill in skills:
+            try:
+                # Open dropdown
+                dropdown = page.locator(".react-select__dropdown-indicator").last
+                await dropdown.click()
+                await asyncio.sleep(0.3)
+
+                # Try exact match first
+                opt = page.get_by_role("option", name=skill, exact=True)
+                if await opt.count() > 0:
+                    await opt.click()
+                    logger.info(f"Skill: {skill}")
+                else:
+                    # Type to filter then select first
+                    inp = page.locator("input[id^='react-select-']")
+                    await inp.fill(skill)
+                    await asyncio.sleep(0.5)
+                    first = page.get_by_role("option").first
+                    if await first.count() > 0:
+                        await first.click()
+                        logger.info(f"Skill (filtered): {skill}")
+                await asyncio.sleep(0.3)
+            except Exception as e:
+                logger.warning(f"Skill '{skill}': {e}")

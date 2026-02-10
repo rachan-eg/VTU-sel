@@ -1,8 +1,9 @@
-"""Browser automation and parallel submission"""
-from .selenium_submission_engine import SeleniumSubmissionEngine as ParallelSubmissionEngine
+"""Browser automation — Playwright-first with Selenium fallback"""
 from .retry_logic import RetryStrategy
 
-# Legacy Playwright engine (has Windows issues)
-# from .submission_engine import ParallelSubmissionEngine
+try:
+    from .submission_engine import PlaywrightSubmissionEngine as ParallelSubmissionEngine
+except ImportError:
+    from .selenium_submission_engine import SeleniumSubmissionEngine as ParallelSubmissionEngine
 
 __all__ = ["ParallelSubmissionEngine", "RetryStrategy"]

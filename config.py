@@ -18,9 +18,11 @@ for dir_path in [DATA_DIR, LOGS_DIR, SCREENSHOTS_DIR, SESSIONS_DIR]:
     dir_path.mkdir(exist_ok=True)
 
 # LLM Configuration
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai, gemini, mock
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai, gemini, cerebras, groq, mock
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo-preview")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
@@ -29,7 +31,7 @@ LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
 BROWSER_ENGINE = os.getenv("BROWSER_ENGINE", "playwright")  # playwright or selenium
 HEADLESS = os.getenv("HEADLESS", "true").lower() == "true"
 BROWSER_PROFILE = os.getenv("BROWSER_PROFILE", "default")
-MAX_PARALLEL_BROWSERS = int(os.getenv("MAX_PARALLEL_BROWSERS", "5"))
+MAX_PARALLEL_BROWSERS = int(os.getenv("MAX_PARALLEL_BROWSERS", "2"))
 SUBMISSION_DELAY_SECONDS = float(os.getenv("SUBMISSION_DELAY_SECONDS", "3.0"))
 
 # VTU Portal
@@ -45,7 +47,7 @@ MAX_DATE_RANGE_DAYS = int(os.getenv("MAX_DATE_RANGE_DAYS", "90"))
 
 # AI Processing
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))
-BATCH_SIZE_DAYS = int(os.getenv("BATCH_SIZE_DAYS", "7"))  # Days per AI batch call
+BATCH_SIZE_DAYS = int(os.getenv("BATCH_SIZE_DAYS", "15"))  # Days per AI batch call (higher = fewer API calls)
 DEFAULT_HOURS_PER_DAY = float(os.getenv("DEFAULT_HOURS_PER_DAY", "7.0"))
 MIN_ENTRY_WORDS = int(os.getenv("MIN_ENTRY_WORDS", "120"))
 MAX_ENTRY_WORDS = int(os.getenv("MAX_ENTRY_WORDS", "180"))

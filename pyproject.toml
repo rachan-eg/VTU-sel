@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "vtu-internship-automation"
 version = "1.0.0"
 description = "Production-ready automation for VTU internship diary generation and submission"
-readme = "README.md"
+readme = "docs/README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [

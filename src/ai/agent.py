@@ -1,8 +1,7 @@
-"""Agentic diary generation system"""
+"""Agentic diary generation system -- single-call optimized with date mapping."""
 import json
 from typing import List, Dict, Any, Optional, Union
 from datetime import date
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import BaseModel, Field
 
 from .llm_client import get_llm_client
@@ -41,104 +40,40 @@ class MultiDayOutput(BaseModel):
 
 
 class DiaryGenerationAgent:
-    """
-    Agentic system for generating diary entries.
-
-    Uses LLM with tools for:
-    - Skill matching
-    - Content expansion
-    - Multi-day batch generation
-    """
+    """Single-call diary generation with date-mapped input."""
 
     def __init__(self, llm_client=None):
         self.llm = llm_client or get_llm_client()
         self.date_manager = DateManager()
         self.skills_list = get_skills_list()
-
-        # Load system prompts
-        self.system_prompt = self._load_prompt("multi_day_system.txt")
-
+        self.system_prompt = self._load_prompt("god_mode_system.txt") or self._load_prompt("multi_day_system.txt")
         logger.info("Diary Generation Agent initialized")
 
     def _load_prompt(self, filename: str) -> str:
-        """Load system prompt from file"""
         prompt_path = SYSTEM_PROMPTS_DIR / filename
         if prompt_path.exists():
             return prompt_path.read_text()
-        else:
-            logger.warning(f"Prompt file not found: {filename}, using fallback")
-            return self._get_fallback_prompt()
+        return ""
 
-    def _get_fallback_prompt(self) -> str:
-        """Fallback system prompt"""
-        return """You are an expert internship diary entry generator for VTU's Internyet portal.
-
-Generate detailed, professional diary entries for multiple dates based on provided input data.
-
-OUTPUT FORMAT: Return a JSON array of diary entries with this structure:
-[
-  {
-    "date": "YYYY-MM-DD",
-    "hours": 7.0,
-    "activities": "<120-180 word detailed description>",
-    "learnings": "<1-2 sentences on technical skills gained>",
-    "blockers": "Description of challenges or 'None'",
-    "links": "",
-    "skills": ["Skill 1", "Skill 2", "Skill 3"],
-    "confidence": 0.95
-  }
-]
-
-RULES:
-1. Activities MUST be 120-180 words
-2. Vary wording across days to avoid repetition
-3. Use realistic, professional language
-4. Include learning curves, debugging challenges
-5. Skills must be from provided VTU skill list
-6. Confidence: 0.9+ for detailed input, 0.7-0.9 for general, <0.7 for sparse
-"""
-
-    def generate_single(
-        self,
-        raw_text: str,
-        target_date: Optional[date] = None,
-        hours: Optional[float] = None
-    ) -> DiaryEntry:
-        """Generate single diary entry"""
-
+    def generate_single(self, raw_text: str, target_date: Optional[date] = None, hours: Optional[float] = None) -> DiaryEntry:
         if target_date is None:
             target_date = date.today()
 
-        # Build prompt with full skills list for LLM to choose from
         skills_formatted = format_skills_for_prompt()
-        prompt = f"""
-Generate a diary entry for {target_date.isoformat()}.
-
-Input data: {raw_text}
-
+        prompt = f"""Generate 1 entry for {target_date.isoformat()}.
+Input: {raw_text}
 Hours: {hours or DEFAULT_HOURS_PER_DAY}
+Skills: {skills_formatted}
+Return JSON {{"entries":[{{...}}]}}"""
 
-IMPORTANT: Select 1-3 most relevant skills from this list based on the activities described:
-{skills_formatted}
-
-Return JSON matching the DiaryEntry schema with skills array containing EXACT names from the list above.
-"""
-
-        # Generate
-        response = self.llm.generate(
-            prompt=prompt,
-            system=self.system_prompt,
-            json_mode=True
-        )
-
-        # Parse and validate
-        if isinstance(response, list) and len(response) > 0:
+        response = self.llm.generate(prompt=prompt, system=self.system_prompt, json_mode=True)
+        if isinstance(response, dict) and "entries" in response:
+            entry_data = response["entries"][0]
+        elif isinstance(response, list) and len(response) > 0:
             entry_data = response[0]
         else:
             entry_data = response
-
-        entry = DiaryEntry(**entry_data)
-        return entry
+        return DiaryEntry(**entry_data)
 
     def generate_bulk(
         self,
@@ -146,193 +81,140 @@ Return JSON matching the DiaryEntry schema with skills array containing EXACT na
         target_dates: List[date],
         distribute_content: bool = True
     ) -> MultiDayOutput:
-        """
-        Generate entries for multiple dates.
-
-        Args:
-            input_data: Raw text or list of per-day data chunks
-            target_dates: List of dates to generate for
-            distribute_content: If True and input is sparse, distribute across dates
-
-        Returns:
-            MultiDayOutput with all entries
-        """
+        """Generate entries -- maps input rows to dates when possible."""
         logger.info(f"Generating bulk entries for {len(target_dates)} dates")
 
-        # Check if we have per-day data or need to distribute
+        # Build date-mapped prompt
+        prompt_input = self._build_date_mapped_input(input_data, target_dates)
+        logger.info(f"Built prompt input: {len(prompt_input)} chars")
+
+        return self._generate_all(prompt_input, target_dates)
+
+    def _build_date_mapped_input(
+        self,
+        input_data: Union[str, List[Dict[str, Any]]],
+        target_dates: List[date],
+    ) -> str:
+        """Build input that maps each row to its date.
+
+        If input rows have dates in metadata, associate them:
+            2026-01-05: Onboarding and system setup
+            2026-01-06: Evaluate private cloud features...
+            2026-01-14: (no specific input -- infer from context)
+
+        This prevents the LLM from mixing Jan 30 tasks into Jan 14.
+        """
         if isinstance(input_data, str):
-            # Single raw text - distribute across all dates
-            return self._generate_distributed(input_data, target_dates)
+            return input_data
 
-        elif isinstance(input_data, list):
-            # List of per-day data
-            if len(input_data) == len(target_dates):
-                # 1:1 mapping
-                return self._generate_mapped(input_data, target_dates)
+        if not isinstance(input_data, list):
+            return str(input_data)
+
+        # Try to map rows to dates using metadata.date
+        date_to_tasks: Dict[str, List[str]] = {}
+        unmapped_tasks: List[str] = []
+
+        for row in input_data:
+            raw = row.get("raw_text", "").strip()
+            if not raw or raw.lower() in ("nan", "none", "null"):
+                continue
+
+            meta_date = row.get("metadata", {}).get("date")
+            if meta_date:
+                date_to_tasks.setdefault(str(meta_date), []).append(raw)
             else:
-                # Distribute available data
-                return self._generate_distributed(input_data, target_dates)
+                unmapped_tasks.append(raw)
 
-    def _generate_distributed(
-        self,
-        raw_text: str,
-        target_dates: List[date]
-    ) -> MultiDayOutput:
-        """Distribute content across multiple dates"""
+        # If no rows had dates, just join raw text
+        if not date_to_tasks:
+            logger.info("No date-mapped rows, joining raw text")
+            return "\n".join(r.get("raw_text", "") for r in input_data if r.get("raw_text", "").strip())
 
-        # Batch dates for efficient API calls
-        batches = [
-            target_dates[i:i + BATCH_SIZE_DAYS]
-            for i in range(0, len(target_dates), BATCH_SIZE_DAYS)
-        ]
+        # Build structured input: one line per date with its tasks
+        lines = []
+        target_strs = {d.isoformat() for d in target_dates}
 
-        all_entries = []
-        warnings = []
+        for d in sorted(date_to_tasks.keys()):
+            tasks = "; ".join(date_to_tasks[d])
+            lines.append(f"{d}: {tasks}")
 
-        # Process batches in parallel
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = []
-            for batch in batches:
-                future = executor.submit(
-                    self._generate_batch,
-                    raw_text,
-                    batch
-                )
-                futures.append(future)
+        # For target dates without input, mark them explicitly
+        mapped_dates = set(date_to_tasks.keys())
+        for td in target_dates:
+            td_str = td.isoformat()
+            if td_str not in mapped_dates:
+                lines.append(f"{td_str}: (no specific input -- infer from project context)")
 
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    all_entries.extend(result["entries"])
-                    warnings.extend(result.get("warnings", []))
-                except Exception as e:
-                    logger.error(f"Batch generation failed: {e}")
-                    warnings.append(f"Batch failed: {str(e)}")
+        # Add unmapped context at the end
+        if unmapped_tasks:
+            context = "\n".join(unmapped_tasks)
+            lines.append(f"\nAdditional context: {context}")
 
-        return MultiDayOutput(
-            entries=all_entries,
-            warnings=warnings,
-            total_generated=len(all_entries)
-        )
+        result = "\n".join(sorted(lines))
+        logger.info(f"Date-mapped input: {len(date_to_tasks)} mapped, "
+                     f"{len(target_dates) - len(date_to_tasks)} to infer")
+        return result
 
-    def _generate_batch(
-        self,
-        raw_text: str,
-        dates: List[date]
-    ) -> Dict[str, Any]:
-        """Generate entries for a batch of dates"""
-
-        date_strs = [d.isoformat() for d in dates]
-
-        # Include full skills list for LLM to choose from
+    def _generate_all(self, prompt_input: str, target_dates: List[date]) -> MultiDayOutput:
+        """ALL entries in ONE call with date-specific input."""
+        date_strs = [d.isoformat() for d in target_dates]
+        n = len(date_strs)
         skills_formatted = format_skills_for_prompt()
 
-        prompt = f"""
-Generate diary entries for the following dates: {', '.join(date_strs)}
+        prompt = f"""Generate {n} diary entries for these dates: {', '.join(date_strs)}
 
-Input data: {raw_text}
+IMPORTANT: Each date has its OWN specific input below. Use ONLY that date's input for its entry.
+Do NOT mix activities from different dates.
 
-SELECT RELEVANT SKILLS FROM THIS LIST (choose 1-3 per entry):
-{skills_formatted}
+DATE-MAPPED INPUT:
+{prompt_input}
 
-IMPORTANT:
-- Generate {len(dates)} distinct entries
-- Vary wording and focus for each day
-- Distribute work phases across dates (setup → development → testing → docs)
-- Each entry 120-180 words
-- Use EXACT skill names from the list above
-- Return as JSON array
+SKILLS (pick 1-3 per entry): {skills_formatted}
 
-Return ONLY valid JSON array matching the schema.
-"""
+Return {{"entries":[...]}} with exactly {n} entries. Each entry MUST only describe work from its own date."""
+
+        logger.info(f"Single-call: {n} dates, ~{len(prompt)} prompt chars")
 
         try:
             response = self.llm.generate(
                 prompt=prompt,
                 system=self.system_prompt,
                 json_mode=True,
-                max_tokens=4000
+                max_tokens=min(8192, n * 350 + 500),
             )
 
-            # Handle response
             if isinstance(response, dict) and "entries" in response:
                 entries_data = response["entries"]
             elif isinstance(response, list):
                 entries_data = response
             else:
-                raise ValueError(f"Unexpected response format: {type(response)}")
+                raise ValueError(f"Unexpected format: {type(response)}")
 
-            # Parse entries
             entries = []
             for entry_data in entries_data:
                 try:
-                    entry = DiaryEntry(**entry_data)
-                    entries.append(entry)
+                    if "hours" in entry_data:
+                        entry_data["hours"] = max(1.0, min(8.0, float(entry_data["hours"])))
+                    if "confidence" in entry_data:
+                        entry_data["confidence"] = max(0.0, min(1.0, float(entry_data["confidence"])))
+                    entries.append(DiaryEntry(**entry_data))
                 except Exception as e:
                     logger.warning(f"Failed to parse entry: {e}")
-                    continue
 
-            return {"entries": entries, "warnings": []}
+            logger.info(f"Single call produced {len(entries)}/{n} entries")
+
+            warnings = []
+            if len(entries) < n:
+                warnings.append(f"LLM produced {len(entries)}/{n} entries.")
+
+            return MultiDayOutput(entries=entries, warnings=warnings, total_generated=len(entries))
 
         except Exception as e:
-            logger.error(f"Batch generation failed: {e}")
-            return {"entries": [], "warnings": [str(e)]}
+            logger.error(f"Generation failed: {e}")
+            return MultiDayOutput(entries=[], warnings=[str(e)], total_generated=0)
 
-    def _generate_mapped(
-        self,
-        data_chunks: List[Dict[str, Any]],
-        target_dates: List[date]
-    ) -> MultiDayOutput:
-        """Generate entries with 1:1 data-to-date mapping"""
-
-        all_entries = []
-        warnings = []
-
-        for data, target_date in zip(data_chunks, target_dates):
-            try:
-                raw_text = data.get("raw_text", "")
-                hours = data.get("metadata", {}).get("hours")
-
-                entry = self.generate_single(
-                    raw_text=raw_text,
-                    target_date=target_date,
-                    hours=hours
-                )
-
-                all_entries.append(entry)
-
-            except Exception as e:
-                logger.error(f"Failed to generate entry for {target_date}: {e}")
-                warnings.append(f"{target_date}: {str(e)}")
-
-        return MultiDayOutput(
-            entries=all_entries,
-            warnings=warnings,
-            total_generated=len(all_entries)
-        )
-
-    def filter_by_confidence(
-        self,
-        output: MultiDayOutput,
-        threshold: float = CONFIDENCE_THRESHOLD
-    ) -> Dict[str, List[DiaryEntry]]:
-        """Filter entries by confidence threshold"""
-
-        high_confidence = []
-        needs_review = []
-
-        for entry in output.entries:
-            if entry.confidence >= threshold:
-                high_confidence.append(entry)
-            else:
-                needs_review.append(entry)
-
-        logger.info(
-            f"Confidence filter: {len(high_confidence)} high, "
-            f"{len(needs_review)} need review"
-        )
-
-        return {
-            "auto_submit": high_confidence,
-            "manual_review": needs_review
-        }
+    def filter_by_confidence(self, output: MultiDayOutput, threshold: float = CONFIDENCE_THRESHOLD) -> Dict[str, List[DiaryEntry]]:
+        high = [e for e in output.entries if e.confidence >= threshold]
+        low = [e for e in output.entries if e.confidence < threshold]
+        logger.info(f"Confidence filter: {len(high)} high, {len(low)} need review")
+        return {"auto_submit": high, "manual_review": low}

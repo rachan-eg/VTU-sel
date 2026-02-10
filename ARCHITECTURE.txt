@@ -250,7 +250,7 @@ EXTENSION POINTS
 
 3. Switch Browser Engine
    → Set BROWSER_ENGINE=selenium or playwright
-   → See BROWSER_SWITCH.md for details
+  → See docs/guides/browser-switching.md for details
 
 4. Add Form Fields
    → Update src/core/form.py (Selenium)

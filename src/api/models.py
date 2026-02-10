@@ -1,5 +1,5 @@
 """Pydantic models for API requests/responses"""
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -17,6 +17,21 @@ class DiaryEntryPreview(BaseModel):
     editable: bool = Field(default=True, description="Whether entry can be edited")
 
 
+class PlausibilityEntryScore(BaseModel):
+    """Per-entry plausibility score"""
+    date: str
+    score: float
+    flags: List[str] = []
+
+
+class PlausibilityReport(BaseModel):
+    """Batch plausibility analysis"""
+    overall_score: float
+    avg_confidence: float
+    flags: List[str] = []
+    entry_scores: List[PlausibilityEntryScore] = []
+
+
 class GeneratePreviewRequest(BaseModel):
     """Request for generating preview entries"""
     date_range: str
@@ -32,6 +47,7 @@ class GeneratePreviewResponse(BaseModel):
     high_confidence_count: int
     needs_review_count: int
     warnings: List[str] = []
+    plausibility_report: Optional[Dict[str, Any]] = None
 
 
 class ApproveAndSubmitRequest(BaseModel):

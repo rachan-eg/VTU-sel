@@ -13,6 +13,7 @@ from src.date_management import DateManager
 from src.ai.agent import DiaryGenerationAgent
 from src.automation import ParallelSubmissionEngine
 from src.db import get_db, SubmissionHistory
+from src.plausibility import PlausibilityEngine
 from .models import (
     DiaryEntryPreview,
     GeneratePreviewResponse,
@@ -192,15 +193,25 @@ async def generate_preview(
                 editable=True
             ))
 
+        # Run plausibility analysis
+        plausibility = PlausibilityEngine()
+        plausibility_report = plausibility.score_batch(
+            [e.dict() for e in preview_entries]
+        )
+
         # Create session for approval
         session_id = str(uuid.uuid4())
         preview_sessions[session_id] = {
             "entries": [e.dict() for e in preview_entries],
             "original_upload_id": upload_id,
-            "warnings": result.warnings
+            "warnings": result.warnings,
+            "plausibility_report": plausibility_report
         }
 
-        logger.info(f"Preview generated: {len(preview_entries)} entries")
+        logger.info(
+            f"Preview generated: {len(preview_entries)} entries, "
+            f"plausibility={plausibility_report['overall_score']:.2f}"
+        )
 
         return GeneratePreviewResponse(
             session_id=session_id,
@@ -208,7 +219,8 @@ async def generate_preview(
             total_entries=len(preview_entries),
             high_confidence_count=len(high_confidence),
             needs_review_count=len(needs_review),
-            warnings=result.warnings
+            warnings=result.warnings,
+            plausibility_report=plausibility_report
         )
 
     except Exception as e:

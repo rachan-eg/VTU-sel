@@ -14,6 +14,10 @@ def fill_diary(driver, wait, data: Dict, dry_run=True, max_retries=3):
     for attempt in range(max_retries):
         try:
             ensure_on_diary_page(driver, data, wait_for_user=False)
+
+            # Wait for the diary form to actually render after navigation
+            _wait_for_form(driver, wait)
+
             return _fill_once(driver, wait, data, dry_run)
         except Exception as e:
             print(f"[VTU] Attempt {attempt+1} failed: {e}")
@@ -22,6 +26,31 @@ def fill_diary(driver, wait, data: Dict, dry_run=True, max_retries=3):
                 time.sleep(2)
             else:
                 raise SubmitError(f"Failed: {e}")
+
+def _wait_for_form(driver, wait, timeout=15):
+    """Wait until the diary form textarea is present on the page."""
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    form_wait = WebDriverWait(driver, timeout)
+    selectors_to_try = [
+        (By.CSS_SELECTOR, "textarea"),
+        (By.CSS_SELECTOR, "textarea[name='description']"),
+        (By.CSS_SELECTOR, "textarea.form-control"),
+        (By.XPATH, "(//textarea)[1]"),
+    ]
+    for by, sel in selectors_to_try:
+        try:
+            form_wait.until(EC.presence_of_element_located((by, sel)))
+            print(f"[VTU] Diary form loaded (found: {sel})")
+            time.sleep(1)  # Extra settle time for React render
+            return
+        except TimeoutException:
+            continue
+
+    # Last resort: just wait and hope
+    print("[VTU] Warning: form textarea not detected, waiting 5s and proceeding...")
+    time.sleep(5)
+
 
 def _fill_once(driver, wait, data, dry_run):
     def fill(selectors, value, field_name):
@@ -55,14 +84,20 @@ def _fill_once(driver, wait, data, dry_run):
             print(f"[VTU] Field not found: {field_name}")
             raise TimeoutException(f"Could not find field {field_name}")
 
-    # Description
+    # Description — aggressive selector list for VTU portal textarea
     fill([
         (By.NAME, "description"),
         (By.NAME, "entry_text"),
-        (By.XPATH, "//textarea[contains(@placeholder, 'Description') or contains(@placeholder, 'entry')]"),
+        (By.NAME, "activities"),
         (By.CSS_SELECTOR, "textarea[name='description']"),
-        (By.ID, "description")
-    ], data["description"], "Description")
+        (By.CSS_SELECTOR, "textarea[name='entry_text']"),
+        (By.CSS_SELECTOR, "textarea.form-control"),
+        (By.CSS_SELECTOR, "textarea"),
+        (By.XPATH, "//textarea[contains(@placeholder, 'Description') or contains(@placeholder, 'entry') or contains(@placeholder, 'activit')]"),
+        (By.XPATH, "//label[contains(text(), 'Description') or contains(text(), 'Activit') or contains(text(), 'What did')]/following::textarea[1]"),
+        (By.XPATH, "(//textarea)[1]"),
+        (By.ID, "description"),
+    ], data.get("description", data.get("activities", "")), "Description")
 
     # Hours
     fill([

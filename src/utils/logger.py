@@ -16,9 +16,10 @@ def setup_logger(name: str, level: str = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level.upper()))
     
-    # Console handler
+    # Console handler (use utf-8 stream to avoid cp1252 encoding errors on Windows)
     if not logger.handlers:
-        console_handler = logging.StreamHandler(sys.stdout)
+        console_stream = open(sys.stdout.fileno(), mode='w', encoding='utf-8', errors='replace', closefd=False)
+        console_handler = logging.StreamHandler(console_stream)
         console_handler.setLevel(logging.DEBUG)
         
         formatter = logging.Formatter(
@@ -38,3 +39,6 @@ def setup_logger(name: str, level: str = None) -> logging.Logger:
         logger.addHandler(file_handler)
     
     return logger
+
+# Alias for compatibility
+get_logger = setup_logger

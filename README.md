@@ -1,305 +1,311 @@
-# VTU Internship Diary Automator
+# VTU Diary Automation v3.0 — GOD MODE
 
-> **Production-ready automation for VTU students** - Transform messy notes into verified internship diary entries with AI assistance and safe portal submission.
+Automated internship diary generation and submission for VTU's Internyet portal.
 
-[![Tests](https://img.shields.io/badge/tests-passing-success)](.)
-[![Python](https://img.shields.io/badge/python-3.11+-blue)](.)
-[![License](https://img.shields.io/badge/license-MIT-green)](.)
+Feed it anything — voice memos, Excel logs, git histories, photos of whiteboards. It generates months of perfectly plausible, evaluator-satisfying diary entries in seconds.
 
----
+## Features
 
-## 🎯 Overview
+- **Universal input ingestion** — CSV, Excel, text, audio, PDF, images
+- **AI diary generation** — Gemini/Groq/Cerebras/OpenAI with auto-fallback
+- **Single-call optimization** — All entries in one LLM call, no quota waste
+- **Date-mapped processing** — Each date gets only its own tasks, no mixing
+- **Playwright automation** — Sequential submission with exact recorded selectors
+- **Modern React UI** — Tailwind + shadcn/ui-inspired frontend
+- **Plausibility scoring** — Warns when entries get too convincing
+- **Self-healing selectors** — Auto-detects VTU portal changes
 
-A fully-fledged system that automates the transformation of raw daily notes into structured internship diary entries and safely submits them to the VTU Internyet portal. Built with **security, truth, and reliability** as core principles.
+## Quick Start
 
-### Why This System?
+### 1. Install Dependencies
 
-- ✅ **Truth-Only AI**: Never fabricates facts - marks missing data explicitly
-- ✅ **Git & Calendar Integration**: Automatically extract commits and events as proof
-- ✅ **Human-in-the-Loop**: Preview, edit, and manually confirm before submission
-- ✅ **Session Persistence**: Login once, reuse sessions for future submissions
-- ✅ **Encrypted Audit Log**: Every action is recorded securely using AES encryption
-- ✅ **Cost Tracking**: Monitor LLM API usage and estimated costs in real-time
-- ✅ **Production-Ready**: Includes retry logic, error handling, tests, and CI/CD
-
----
-
-## 🚀 Quickstart
-
-### 1. Installation
-
-```powershell
-# Clone the repository
-git clone <repo-url>
-cd VTU-sel
-
-# Install dependencies with UV (recommended - 10-100x faster)
-uv sync
-
-# Or with pip
+```bash
+# Python deps
 pip install -r requirements.txt
+
+# Playwright browser
+playwright install chromium
+
+# Frontend (optional)
+cd frontend
+npm install
+npm run build  # outputs to ../static/
 ```
 
-### 2. Configuration
+### 2. Configure Environment
 
-```powershell
-# Copy the example environment file
-copy .env.example .env
+Copy `.env.example` to `.env` and fill in:
 
-# Edit .env and configure:
-# - LLM_PROVIDER (mock, gemini, or openai)
-# - API keys (GEMINI_API_KEY or OPENAI_API_KEY)
-# - AUDIT_SECRET_KEY (see below)
+```bash
+# Required
+VTU_EMAIL=your_vtu_email@example.com
+VTU_PASSWORD=your_vtu_password
+
+# At least one LLM API key
+GROQ_API_KEY=gsk_xxxxx              # Free tier: 14,400 req/day
+# GEMINI_API_KEY=AIza_xxxxx         # Free tier: 20 req/day
+# CEREBRAS_API_KEY=csk_xxxxx        # Paid
+# OPENAI_API_KEY=sk-xxxxx           # Paid
 ```
 
-**Generate an encryption key for audit logs:**
+### 3. Run
 
-```python
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```bash
+python app_new.py
+# Open http://localhost:5000
 ```
 
-Add the output to your `.env` as `AUDIT_SECRET_KEY`.
+For development with hot reload:
+```bash
+# Terminal 1: Frontend dev server
+cd frontend && npm run dev   # :3000
 
-### 3. Running the System
-
-#### **Web UI (Recommended)**
-
-```powershell
-# Start the web server
-python src/cli.py serve
-
-# Open browser to: http://localhost:5000
+# Terminal 2: Backend API
+python app_new.py            # :5000
 ```
 
-#### **CLI Mode**
+## Usage
 
-```powershell
-# Generate diary from notes
-python src/cli.py generate --input examples/today_notes.txt --output generated.json
+### Web UI Flow
 
-# Submit to portal (dry-run)
-python src/cli.py submit --entry generated.json --dry-run
+1. **Upload** — Drop any file or paste text
+2. **Date Range** — Select from/to dates, skip weekends/holidays
+3. **Generate** — AI creates entries in seconds
+4. **Preview** — Review, edit, check plausibility scores
+5. **Launch** — Playwright swarm submits to VTU portal
+6. **History** — View all submissions, export CSV
 
-# View audit log
-python src/cli.py audit list
+### Supported Input Formats
+
+| Format | Example | Processor |
+|--------|---------|-----------|
+| Excel/CSV | Task logs with Date/Task/Duration columns | Auto-detects headers |
+| Text | Meeting notes, bullet points | Pass-through |
+| Audio | Voice memos (.mp3, .wav, .m4a) | Whisper STT |
+| PDF | Reports, documents | pdfplumber |
+| Images | Whiteboard photos | OCR (future) |
+
+### CSV Structure (Auto-Detected)
+
+The system auto-detects CSV headers. Your CSV can have:
+- `Date` / `Day` / `When` → mapped to entry dates
+- `Task` / `Activity` / `Work` / `Description` → main content
+- `Hours` / `Duration` / `Task Duration` → hours worked
+- `Skills` → pre-selected skills
+
+Example:
+```csv
+Date,Application,Task,Task Duration,Status
+05-01-2026,PitchSync,Onboarding and setup,8,Completed
+06-01-2026,PitchSync,Research cloud features and design workshop,8,Completed
 ```
 
-### 4. Run Tests
+## Architecture
 
-```powershell
-pytest -v --cov=src
-```
-
----
-
-## 📁 Project Structure
+### AI Pipeline
 
 ```
-VTU-sel/
-├── src/
-│   ├── cli.py                   # Professional CLI with full command suite
-│   ├── llm_client.py            # LLM wrapper (Gemini/OpenAI/Mock) with retry & cost tracking
-│   ├── diary_formatter.py       # Pydantic validation and word count checks
-│   ├── selenium_submit.py       # Production-grade Selenium automation
-│   ├── audit.py                 # Encrypted audit logging (AES)
-│   ├── config.py                # Configuration management with validation
-│   ├── integrations/
-│   │   ├── git_client.py        # Git commit extraction
-│   │   └── calendar_client.py   # Calendar event integration (stub)
-│   ├── utils/
-│   │   └── logger.py            # Centralized logging
-│   └── web_preview/
-│       ├── app.py               # Enhanced Flask application
-│       └── templates/           # Premium web UI templates
-├── system_prompts/
-│   └── diary_generator_system.txt  # Truth-enforcing LLM system prompt
-├── tests/
-│   ├── test_llm_parsing.py      # Unit tests for diary formatting
-│   ├── test_selenium.py         # Integration tests with HTML fixture
-│   └── fixture.html             # Test HTML for Selenium
-├── examples/
-│   ├── today_notes.txt          # Sample raw notes
-│   └── expected_output.json     # Expected LLM output
-├── .github/workflows/
-│   └── ci.yml                   # GitHub Actions CI/CD
-├── requirements.txt             # Python dependencies
-├── pyproject.toml               # Project metadata
-├── .gitignore                   # Git ignore rules
-└── README.md                    # This file
+Input (any format)
+  ↓
+Excel/Text/Audio Processor → Raw text per row
+  ↓
+Date Mapper → Associate each row with its date
+  ↓
+Single LLM Call → Generate all entries at once
+  ↓
+Plausibility Engine → Score each entry
+  ↓
+Preview UI → User reviews/edits
+  ↓
+Playwright Engine → Submit to VTU portal
 ```
 
----
+### LLM Provider Chain
 
-## 🔐 Security & Privacy
+Set `LLM_PROVIDER=auto` in `.env` to enable automatic fallback:
 
-### Truth-Only Rule
-The LLM is constrained to produce entries **only from user-supplied inputs**. If facts are missing (e.g., meeting end time), they are marked as `null` and listed in the `uncertainties` array.
-
-### No Auto-Submit
-The Selenium automation will:
-1. Fill the portal form
-2. Highlight the "Save" button
-3. **Wait for your manual click** in the browser
-
-It will **never** click "Submit" without your explicit confirmation.
-
-### Encrypted Audit
-All raw inputs, LLM outputs, and portal responses are stored in an AES-encrypted file (`audit_log.enc`). The encryption key must be stored securely (ideally in OS keyring or `.env`).
-
-### Credentials
-Never store plaintext credentials. Configure API keys and secrets in `.env` (git-ignored) or use environment variables.
-
----
-
-## 🧪 Testing
-
-### Run All Tests
-```powershell
-pytest
+```
+groq (14,400/day free) → gemini (20/day free) → cerebras (paid) → openai (paid)
 ```
 
-### Run Specific Test Suites
-```powershell
-pytest tests/test_llm_parsing.py      # Unit tests only
-pytest tests/test_selenium.py         # Integration tests (Selenium)
-```
+On quota exhaustion or 402/429 errors, instantly fails over to next provider.
 
-### Check Code Quality
-```powershell
-flake8 src      # Check for issues
-black src       # Auto-format code with black
-```
+### Submission Engine
 
----
+**Playwright** (default):
+- Sequential mode — one page, all entries
+- Login once, reuse session for all entries
+- Native `get_by_role` selectors from codegen recording
+- React state updates via `dispatch_event`
+- Force-enable disabled Save button via JS
 
-## 🛠️ Configuration
+**Selenium** (fallback):
+- Available if Playwright unavailable
+- Slower, more resource-intensive
+
+## Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_PROVIDER` | AI provider (`mock`, `gemini`, `openai`) | `mock` |
-| `GEMINI_API_KEY` | Google Gemini API key | — |
-| `OPENAI_API_KEY` | OpenAI API key | — |
-| `AUDIT_SECRET_KEY` | AES encryption key for audit logs | Auto-generated | 
-| `FLASK_SECRET_KEY` | Flask session secret | `dev-secret` |
-| `SELENIUM_HEADLESS` | Run browser headless (`true`/`false`) | `false` |
-| `PORTAL_LOGIN_URL` | VTU portal login page | `https://internyet.vtu.ac.in/login` |
-| `LOG_LEVEL` | Logging level | `INFO` |
+See [`.env.example`](.env.example) for all options.
 
-### Example `.env`
+Key settings:
 
-```env
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=your_gemini_api_key_here
-AUDIT_SECRET_KEY=your_generated_fernet_key_here
-FLASK_SECRET_KEY=random_secret_for_sessions
-SELENIUM_HEADLESS=false
-LOG_LEVEL=INFO
+```bash
+# LLM
+LLM_PROVIDER=auto                # auto, groq, gemini, cerebras, openai
+BATCH_SIZE_DAYS=20               # Days per API call (higher = fewer calls)
+
+# Browser
+HEADLESS=true                    # Run browsers headless
+MAX_PARALLEL_BROWSERS=2          # Concurrent workers (Playwright sequential, this is ignored)
+
+# Portal
+PORTAL_LOGIN_URL=https://vtu.internyet.in/sign-in
 ```
 
----
+### System Prompt
 
-## 📊 Features
+Located at [`system_prompts/god_mode_system.txt`](system_prompts/god_mode_system.txt).
 
-### 1. **AI Diary Generation**
-- Powered by Gemini or OpenAI (or mock mode for testing)
-- Strict JSON schema enforcement
-- Automatic retry on failure (exponential backoff)
-- Token usage and cost tracking
+Key directives:
+- 150-200 words per entry (rich, detailed)
+- Write like a real engineering student, not AI
+- Pick skills ONLY from actual work (no random Ruby on Rails)
+- Strict date isolation — no mixing tasks across dates
+- Hours always 8
 
-### 2. **Git & Calendar Integration**
-- Extract today's commits from local git repo
-- Parse calendar events (extensible for Google Calendar, Outlook, etc.)
-- Artifacts are included in LLM context for better accuracy
+## Troubleshooting
 
-### 3. **Web Preview UI**
-- Modern, responsive interface
-- Real-time word count validation
-- Uncertainty warnings
-- Edit-before-submit workflow
-- Audit log dashboard
-
-### 4. **Selenium Portal Automation**
-- Robust selector fallbacks
-- Session persistence (cookies)
-- Retry logic with screenshot capture
-- Anti-detection measures
-- Dry-run mode for testing
-
-### 5. **Audit & Compliance**
-- Encrypted JSON logs
-- Rotation and export commands
-- Timeline view with statistics
-- Full traceability
-
----
-
-
----
-
-## 🎓 Usage Examples
-
-### CLI Workflow
-
-```powershell
-# 1. Generate from raw notes
-python src/cli.py generate \
-  --input examples/today_notes.txt \
-  --output generated.json \
-  --with-git
-
-# 2. Preview the output
-type generated.json
-
-# 3. Submit to portal (dry-run first)
-python src/cli.py submit \
-  --entry generated.json \
-  --hours 8 \
-  --dry-run
-
-# 4. View audit history
-python src/cli.py audit list
+**"No module named 'playwright'"**
+```bash
+pip install playwright
+playwright install chromium
 ```
 
-### Web UI Workflow
+**"All providers exhausted"**
+- Add at least one valid API key to `.env`
+- Check your quota/billing for each provider
 
-1. Navigate to `http://localhost:5000`
-2. Click "Generate Diary"
-3. Paste your raw notes
-4. Optionally enable Git/Calendar integration
-5. Click "Generate Entry"
-6. Review in Preview page
-7. Edit if needed
-8. Click "Confirm & Submit to Portal"
-9. Manually confirm in browser
+**"Field not found: Description"**
+- The recorded selectors might be stale
+- Re-run `playwright codegen` and update selectors in `submission_engine.py`
 
----
+**Database issues**
+```bash
+rm vtu_automation.db    # Delete and restart to recreate
+```
 
-## 🤝 Contributing
+**Session issues**
+```bash
+rm -rf sessions/ auth_state.json
+```
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## File Structure
 
-All PRs must pass CI checks (tests + linting).
+```
+VTU-sel/
+├── app_new.py                    # FastAPI backend + SPA server
+├── config.py                     # Centralized configuration
+├── frontend/                     # React + Vite + Tailwind UI
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── pages/                # Dashboard, Upload, Preview, Progress, History
+│   │   ├── components/           # PlausibilityGauge, EntryCard, FileDropzone, etc.
+│   │   └── lib/                  # API client, utils
+│   ├── package.json
+│   └── vite.config.ts
+├── src/
+│   ├── ai/
+│   │   ├── agent.py              # Single-call diary generation with date mapping
+│   │   ├── llm_client.py         # Multi-provider fallback chain
+│   │   └── vtu_skills.py         # Curated skills list
+│   ├── automation/
+│   │   └── submission_engine.py  # Playwright sequential submission
+│   ├── input/
+│   │   ├── excel_processor.py    # Auto-header detection, any CSV schema
+│   │   ├── audio_processor.py    # Whisper STT
+│   │   └── router.py             # Multi-format routing
+│   ├── core/
+│   │   ├── form.py               # Selenium form fill (legacy)
+│   │   └── navigation.py         # Selenium navigation (legacy)
+│   ├── plausibility/
+│   │   └── engine.py             # Multi-axis entry scoring
+│   ├── self_healing/
+│   │   └── selectors.py          # Auto-recovering selectors + stealth
+│   ├── api/
+│   │   ├── routes.py             # FastAPI endpoints
+│   │   └── models.py             # Pydantic schemas
+│   └── db/
+│       ├── models.py             # SQLAlchemy ORM
+│       └── session.py            # DB connection
+├── system_prompts/
+│   └── god_mode_system.txt       # The main prompt
+└── static/                       # Built React app (from frontend/build)
+```
 
----
+## Development
 
-## 📝 License
+### Recording Portal Selectors
 
-MIT License - see LICENSE file for details.
+When VTU updates their portal:
 
----
+```bash
+playwright codegen https://vtu.internyet.in/sign-in -o recorded_flow.py
+```
 
-## 🙏 Acknowledgments
+Walk through: login → diary page → select internship → pick date → fill form → save.
 
-- Built for VTU students to streamline internship documentation
-- Inspired by the need for truth-preserving automation
-- Powered by modern LLMs with human oversight
+Update `src/automation/submission_engine.py` with the new selectors.
 
----
+### Adding LLM Providers
 
-**Ready to automate your internship diary?** Start with `python src/cli.py serve` and visit `http://localhost:5000`! 🚀
+1. Create `src/core/llm/your_provider.py` implementing `LLMProvider` interface
+2. Add to `src/ai/llm_client.py` registry
+3. Add `YOUR_PROVIDER_API_KEY` to `config.py`
+
+### Modifying Skills List
+
+Edit `src/ai/vtu_skills.py` — add/remove from the `VTU_SKILLS` array.
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/upload-file` | POST | Upload file, get upload_id |
+| `/api/upload-text` | POST | Upload raw text, get upload_id |
+| `/api/generate-preview` | POST | Generate entries for preview |
+| `/api/approve-and-submit` | POST | Submit approved entries (background) |
+| `/api/progress/{id}` | GET | Get submission progress |
+| `/api/history` | GET | Get submission history |
+| `/api/history/stats` | GET | Get stats (total, success rate) |
+| `/ws/progress/{id}` | WS | WebSocket progress stream |
+
+## Tech Stack
+
+**Backend:**
+- FastAPI + Uvicorn
+- Playwright (async browser automation)
+- SQLAlchemy (SQLite)
+- Pydantic (validation)
+- Whisper (audio transcription)
+
+**Frontend:**
+- React 18 + TypeScript
+- Vite (build tool)
+- Tailwind CSS
+- Framer Motion (animations)
+- Recharts (visualizations)
+
+**AI:**
+- Groq, Gemini, Cerebras, OpenAI (multi-provider)
+- Automatic fallback chain
+- Single-call optimization
+
+## License
+
+MIT
+
+## Warning
+
+This tool automates form submission. Use responsibly and in accordance with your institution's policies.

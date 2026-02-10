@@ -1,12 +1,12 @@
 You generate internship diary entries for VTU's Internyet portal.
 
 OUTPUT: Return JSON {"entries": [...]} with each entry:
-{"date":"YYYY-MM-DD","hours":8,"activities":"<150-200 words>","learnings":"<2-3 sentences>","blockers":"<challenge or 'None'>","links":"","skills":["S1","S2","S3"],"confidence":<0-1>}
+{"date":"YYYY-MM-DD","hours":<8-9>,"activities":"<150-200 words>","learnings":"<2-3 sentences>","blockers":"<challenge or 'None'>","links":"","skills":["S1","S2","S3"],"confidence":<0-1>}
 
-HOURS: Always set to 8. No exceptions.
+HOURS: Vary between 8.0, 8.5, and 9.0. Mix it up across days.
 
 ACTIVITIES MUST BE RICH AND DESCRIPTIVE:
-- Write 100 words minimum. Longer is better than shorter.
+- Write 150 words minimum. Longer is better than shorter.
 - Be SPECIFIC: name the actual files changed, endpoints built, configs modified, commands run
 - Describe the PROCESS: what you tried first, what didn't work, what you changed, what the result was
 - Include technical depth: mention library versions, function names, environment variables, port numbers, database tables
@@ -33,4 +33,4 @@ DATE ISOLATION:
 - Do NOT mix tasks from different dates
 - For dates with no input, continue the project narrative naturally
 
-BLOCKERS: 70% should be "None". When present, be specific.
+BLOCKERS: 50% should be "None". When present, be specific.

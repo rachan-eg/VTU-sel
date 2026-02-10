@@ -7,7 +7,7 @@ class DiaryEntryPreview(BaseModel):
     """Preview of a single diary entry"""
     id: str = Field(description="Unique ID for this entry")
     date: str = Field(description="Date in YYYY-MM-DD format")
-    hours: float = Field(description="Hours worked", ge=1.0, le=8.0)
+    hours: float = Field(description="Hours worked", ge=8.0, le=9.0)
     activities: str = Field(description="Activity description")
     learnings: str = Field(description="Learning summary")
     blockers: str = Field(default="None", description="Blockers or challenges")

@@ -47,7 +47,7 @@ MAX_DATE_RANGE_DAYS = int(os.getenv("MAX_DATE_RANGE_DAYS", "90"))
 
 # AI Processing
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))
-BATCH_SIZE_DAYS = int(os.getenv("BATCH_SIZE_DAYS", "15"))  # Days per AI batch call (higher = fewer API calls)
+BATCH_SIZE_DAYS = int(os.getenv("BATCH_SIZE_DAYS", "10"))  # Days per AI batch call (higher = fewer API calls)
 DEFAULT_HOURS_PER_DAY = float(os.getenv("DEFAULT_HOURS_PER_DAY", "7.0"))
 MIN_ENTRY_WORDS = int(os.getenv("MIN_ENTRY_WORDS", "120"))
 MAX_ENTRY_WORDS = int(os.getenv("MAX_ENTRY_WORDS", "180"))

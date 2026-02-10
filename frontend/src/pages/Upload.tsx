@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { format } from 'date-fns'
 import {
   CalendarRange,
+  Calendar as CalendarIcon,
   Loader2,
   Zap,
   ToggleLeft,
@@ -10,21 +12,35 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import FileDropzone from '@/components/FileDropzone'
+import CalendarPicker from '@/components/CalendarPicker'
 import { uploadFile, uploadText, generatePreview } from '@/lib/api'
 
 export default function UploadPage() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState<'file' | 'text'>('file')
+  const [inputMode, setInputMode] = useState<'file' | 'text'>('file')
+  const [dateMode, setDateMode] = useState<'range' | 'calendar'>('calendar')
   const [file, setFile] = useState<File | null>(null)
   const [text, setText] = useState('')
+
+  // Range mode
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // Calendar mode
+  const [selectedDates, setSelectedDates] = useState<Date[]>([new Date()])
+
   const [skipWeekends, setSkipWeekends] = useState(true)
   const [skipHolidays, setSkipHolidays] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = (mode === 'file' ? !!file : text.trim().length > 10) && dateFrom && dateTo
+  const hasInput = inputMode === 'file' ? !!file : text.trim().length > 10
+  const hasDates =
+    dateMode === 'range'
+      ? dateFrom && dateTo
+      : selectedDates.length > 0
+
+  const canSubmit = hasInput && hasDates
 
   const handleGenerate = async () => {
     if (!canSubmit) return
@@ -34,7 +50,7 @@ export default function UploadPage() {
     try {
       // Step 1: Upload
       let uploadId: string
-      if (mode === 'file' && file) {
+      if (inputMode === 'file' && file) {
         const res = await uploadFile(file)
         uploadId = res.upload_id
       } else {
@@ -43,7 +59,16 @@ export default function UploadPage() {
       }
 
       // Step 2: Generate preview
-      const dateRange = `${dateFrom} to ${dateTo}`
+      let dateRange: string
+      if (dateMode === 'range') {
+        dateRange = `${dateFrom} to ${dateTo}`
+      } else {
+        // Convert selected dates to range format
+        const sorted = selectedDates.sort((a, b) => a.getTime() - b.getTime())
+        const formatted = sorted.map((d) => format(d, 'yyyy-MM-dd')).join(',')
+        dateRange = formatted
+      }
+
       const preview = await generatePreview(uploadId, dateRange, skipWeekends, skipHolidays)
 
       // Store in sessionStorage and navigate
@@ -57,7 +82,7 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl mx-auto">
+    <div className="space-y-8 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-black tracking-tight">Feed the Machine</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -65,14 +90,14 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {/* Mode toggle */}
+      {/* Input mode toggle */}
       <div className="flex gap-2">
         {(['file', 'text'] as const).map((m) => (
           <button
             key={m}
-            onClick={() => setMode(m)}
+            onClick={() => setInputMode(m)}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-              mode === m
+              inputMode === m
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:text-foreground'
             }`}
@@ -84,12 +109,12 @@ export default function UploadPage() {
 
       {/* Input area */}
       <motion.div
-        key={mode}
-        initial={{ opacity: 0, x: mode === 'file' ? -20 : 20 }}
+        key={inputMode}
+        initial={{ opacity: 0, x: inputMode === 'file' ? -20 : 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.2 }}
       >
-        {mode === 'file' ? (
+        {inputMode === 'file' ? (
           <FileDropzone file={file} onFile={setFile} />
         ) : (
           <div className="relative">
@@ -106,33 +131,72 @@ export default function UploadPage() {
         )}
       </motion.div>
 
-      {/* Date range */}
+      {/* Date selection */}
       <div className="border border-border rounded-xl p-5 bg-card space-y-4">
-        <div className="flex items-center gap-2">
-          <CalendarRange className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Date Range</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Select Dates</span>
+          </div>
+
+          {/* Date mode toggle */}
+          <div className="flex gap-1 text-xs">
+            {(['range', 'calendar'] as const).map((dm) => (
+              <button
+                key={dm}
+                onClick={() => setDateMode(dm)}
+                className={`px-3 py-1.5 rounded-md transition-all ${
+                  dateMode === dm
+                    ? 'bg-muted text-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {dm === 'range' ? (
+                  <CalendarRange className="w-3.5 h-3.5" />
+                ) : (
+                  <CalendarIcon className="w-3.5 h-3.5" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">From</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full bg-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+        <motion.div
+          key={dateMode}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {dateMode === 'range' ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full bg-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full bg-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            </div>
+          ) : (
+            <CalendarPicker
+              selected={selectedDates}
+              onSelect={setSelectedDates}
+              skipWeekends={skipWeekends}
+              skipHolidays={skipHolidays}
             />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">To</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-full bg-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-        </div>
+          )}
+        </motion.div>
 
         <div className="flex gap-6">
           <button

@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 class DiaryEntry(BaseModel):
     """Single diary entry"""
     date: str = Field(description="Date in YYYY-MM-DD format")
-    hours: float = Field(description="Hours worked (1-8)", ge=1.0, le=8.0)
+    hours: float = Field(description="Hours worked (8-9)", ge=8.0, le=9.0)
     activities: str = Field(description="Detailed description (120-180 words)")
     learnings: str = Field(description="Learning summary")
     blockers: str = Field(description="Blockers or challenges", default="None")
@@ -194,7 +194,7 @@ Return {{"entries":[...]}} with exactly {n} entries. Each entry MUST only descri
             for entry_data in entries_data:
                 try:
                     if "hours" in entry_data:
-                        entry_data["hours"] = max(1.0, min(8.0, float(entry_data["hours"])))
+                        entry_data["hours"] = max(8.0, min(9.0, float(entry_data["hours"])))
                     if "confidence" in entry_data:
                         entry_data["confidence"] = max(0.0, min(1.0, float(entry_data["confidence"])))
                     entries.append(DiaryEntry(**entry_data))
